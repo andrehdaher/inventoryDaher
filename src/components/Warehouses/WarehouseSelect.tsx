@@ -1,5 +1,6 @@
 import { useWarehouseContext } from "@/contexts/WarehouseContexts";
 import FormInput from "../ui/custom/FormInput";
+import { useState } from "react";
 
 interface Props {
   label?: string
@@ -9,6 +10,7 @@ interface Props {
 
 export default function WarehouseSelect({ value, onChange, label }: Props) {
   const { data: warehouses = [], isLoading } = useWarehouseContext();
+  const [tempValue, setTempValue] = useState("");
 
   const isOther = value === "other";
 
@@ -20,13 +22,16 @@ export default function WarehouseSelect({ value, onChange, label }: Props) {
           disabled={isLoading}
           label={label || "المستودع المنقول إليه"}
           value={value}
-          options={warehouses
+          options={[
+            ...warehouses
             .map((wh: any) => wh.name?.trim()) // استخراج الاسم فقط
             .filter(Boolean)
             .map((name) => ({
               id: name,
               name,
-            }))}
+            })),
+
+          ]}
           onChange={(e: any) => onChange(e.target.value)}
         />
       )}

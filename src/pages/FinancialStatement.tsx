@@ -1,15 +1,15 @@
 import { DataTable } from "@/components/dashboard/DataTable";
 import { StatsCard } from "@/components/dashboard/StatsCard";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import getAllPayments from "@/services/payments";
-import { useQuery } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import Loading from "@/components/ui/custom/Loading";
 import {
-  TrendingUp,
-  Wallet,
-  ArrowDownCircle,
-  CalendarIcon,
-} from "lucide-react";
-import { useMemo, useState } from "react";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -17,166 +17,596 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Payment } from "@/services/payments";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { format } from "date-fns";
-import { DateRange } from "react-day-picker";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
 import AddBalanceForm from "@/components/FinancialStatement/AddBalanceForm";
 import TakeBalanceForm from "@/components/FinancialStatement/TakeBalanceForm";
-import Loading from "@/components/ui/custom/Loading";
+import getAllCustomer from "@/services/customer";
+import getAllPayments, { Payment } from "@/services/payments";
+import getAllPurchases from "@/services/purchases";
+import getAllReturn from "@/services/return";
+import getAllSells from "@/services/sells";
+import getAllSupplier from "@/services/supplier";
+import { useQuery } from "@tanstack/react-query";
+import { format } from "date-fns";
+import {
+  ArrowDownCircle,
+  ArrowUpCircle,
+  CalendarIcon,
+  ReceiptText,
+  RotateCcw,
+  ShoppingCart,
+  Wallet,
+} from "lucide-react";
+import { useMemo, useState } from "react";
+import { DateRange } from "react-day-picker";
+
+interface PurchaseRecord {
+  id?: string;
+  supplierId?: string;
+  name?: string;
+  code?: string;
+  totalPrice?: number | string;
+  amount_base?: number | string;
+  paymentStatus?: string;
+  remainingDebt?: number | string;
+  currency?: string;
+  date?: string;
+}
+
+interface SellProduct {
+  name?: string;
+}
+
+interface SellRecord {
+  id?: string;
+  customerId?: string;
+  totalPrice?: number | string;
+  amount_base?: number | string;
+  paymentStatus?: string;
+  remainingDebt?: number | string;
+  currency?: string;
+  date?: string;
+  products?: SellProduct[];
+}
+
+interface ReturnRecord {
+  id?: string;
+  customerId?: string;
+  supplierId?: string;
+  customerName?: string;
+  supplierName?: string;
+  productName?: string;
+  name?: string;
+  code?: string;
+  productCode?: string;
+  referenceId?: string;
+  sellId?: string | number;
+  purchaseId?: string | number;
+  returnValue?: number | string;
+  totalPrice?: number | string;
+  amount_base?: number | string;
+  currency?: string;
+  reason?: string;
+  returnSource?: "customer" | "supplier" | string;
+  date?: string;
+  createdDate?: string;
+  createdAt?: string;
+}
+
+interface PartyRecord {
+  id: string;
+  name: string;
+}
+
+interface FinancialOperation {
+  id: string;
+  operationType: "purchase" | "sell" | "payment" | "return";
+  operationLabel: string;
+  subType: string;
+  reference: string;
+  description: string;
+  partyName: string;
+  amount: number;
+  originalAmount: number;
+  currency: string;
+  effect: "داخل" | "خارج" | "ذمم" | "-";
+  date: string;
+  status: string;
+  note: string;
+  sortTime: number;
+}
+
+const operationsColumns = [
+  { label: "المعرف", key: "id", hidden: true },
+  { label: "نوع العملية", key: "operationLabel", sortable: true },
+  { label: "التصنيف", key: "subType", sortable: true },
+  { label: "المرجع", key: "reference", sortable: true },
+  { label: "الأثر", key: "effect", sortable: true },
+  { label: "الطرف", key: "partyName", sortable: true },
+  { label: "الوصف", key: "description", sortable: true },
+  { label: "المبلغ", key: "amount", sortable: true },
+  { label: "العملة", key: "currency", sortable: true },
+  { label: "الحالة", key: "status", sortable: true },
+  { label: "ملاحظات", key: "note", sortable: true },
+  { label: "التاريخ", key: "date", sortable: true },
+];
+
+const toNumber = (value: unknown) => {
+  const numericValue = Number(value || 0);
+  return Number.isFinite(numericValue) ? numericValue : 0;
+};
+
+const formatAmount = (value: number) =>
+  value.toLocaleString("en-US", {
+    maximumFractionDigits: 2,
+  });
+
+const normalizeCurrency = (currency?: string) =>
+  (currency || "USD").toUpperCase();
+
+const getOperationAmount = (
+  currency: string | undefined,
+  amount: unknown,
+  amountBase?: unknown,
+) => {
+  const normalizedCurrency = normalizeCurrency(currency);
+  return normalizedCurrency === "USD"
+    ? toNumber(amount)
+    : toNumber(amountBase ?? amount);
+};
+
+const normalizeDateText = (value: string) =>
+  value
+    .replace(/[\u200e\u200f\u061c]/g, "")
+    .replace("،", ",")
+    .replace("ص", "AM")
+    .replace("م", "PM")
+    .trim();
+
+const parseFinancialDate = (value?: string) => {
+  if (!value) return 0;
+
+  if (!Number.isNaN(Number(value))) return Number(value);
+
+  const nativeDate = Date.parse(value);
+  if (!Number.isNaN(nativeDate)) return nativeDate;
+
+  const normalized = normalizeDateText(value);
+  const match = normalized.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4}),?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i,
+  );
+
+  if (!match) return 0;
+
+  const [, day, month, year, hour, minute, second = "0", period] = match;
+  let parsedHour = Number(hour);
+
+  if (period?.toUpperCase() === "PM" && parsedHour < 12) parsedHour += 12;
+  if (period?.toUpperCase() === "AM" && parsedHour === 12) parsedHour = 0;
+
+  return new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    parsedHour,
+    Number(minute),
+    Number(second),
+  ).getTime();
+};
+
+const getPaymentSubTypeLabel = (type: string) => {
+  if (type === "income") return "تحصيل";
+  if (type === "expense") return "صرف";
+  if (type === "return") return "مرتجع";
+  return type || "-";
+};
+
+const getStatusLabel = (status?: string) => {
+  if (status === "cash") return "نقدي";
+  if (status === "part") return "جزئي";
+  if (status === "debt") return "آجل";
+  return status || "-";
+};
+
+const getPartyName = ({
+  customerId,
+  supplierId,
+  customersMap,
+  suppliersMap,
+}: {
+  customerId?: string;
+  supplierId?: string;
+  customersMap: Record<string, string>;
+  suppliersMap: Record<string, string>;
+}) => {
+  if (customerId) return customersMap[customerId] || customerId;
+  if (supplierId) return suppliersMap[supplierId] || supplierId;
+  return "-";
+};
+
+const getReturnDate = (item: ReturnRecord) =>
+  item.createdDate || item.date || item.createdAt || "";
+
+const isSupplierReturn = (item: ReturnRecord) =>
+  item.returnSource === "supplier" || Boolean(item.supplierId || item.supplierName);
 
 export default function FinancialStatement() {
   const [isOpenPay, setIsOpenPay] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
-  const { data: payments, isLoading } = useQuery<Payment[]>({
-    queryKey: ["payments-table"],
-    queryFn: () => getAllPayments(),
+  const [selectedType, setSelectedType] = useState<string>("all");
+  const [selectedCurrency, setSelectedCurrency] = useState<string>("all");
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["financial-operations"],
+    queryFn: async () => {
+      const [payments, purchases, sells, returns, customers, suppliers] =
+        await Promise.all([
+          getAllPayments(),
+          getAllPurchases(),
+          getAllSells(),
+          getAllReturn(),
+          getAllCustomer(),
+          getAllSupplier(),
+        ]);
+
+      return {
+        payments: (payments || []) as Payment[],
+        purchases: (purchases || []) as PurchaseRecord[],
+        sells: (sells || []) as SellRecord[],
+        returns: (returns || []) as ReturnRecord[],
+        customers: (customers || []) as PartyRecord[],
+        suppliers: (suppliers || []) as PartyRecord[],
+      };
+    },
   });
 
-  // ---------------- فلاتر ----------------
-  const [selectedType, setSelectedType] = useState<string>("all");
+  const customersMap = useMemo(
+    () =>
+      Object.fromEntries(
+        (data?.customers || []).map((customer) => [customer.id, customer.name]),
+      ),
+    [data?.customers],
+  );
 
-  // تصفية البيانات حسب الفلاتر
-  const filteredPayments = useMemo(() => {
-    let data = payments || [];
+  const suppliersMap = useMemo(
+    () =>
+      Object.fromEntries(
+        (data?.suppliers || []).map((supplier) => [supplier.id, supplier.name]),
+      ),
+    [data?.suppliers],
+  );
+
+  const operations = useMemo<FinancialOperation[]>(() => {
+    const payments = (data?.payments || []).map((payment) => {
+      const currency = normalizeCurrency(payment.currency);
+      const amount = getOperationAmount(
+        payment.currency,
+        Math.abs(toNumber(payment.amount)),
+        Math.abs(toNumber(payment.amount_base)),
+      );
+
+      return {
+        id: payment.id || `payment-${payment.date || payment.amount}`,
+        operationType: "payment" as const,
+        operationLabel: "دفعة",
+        subType: getPaymentSubTypeLabel(payment.type),
+        reference: payment.id || "-",
+        description: payment.note || "حركة مالية",
+        partyName: getPartyName({
+          customerId: payment.customerId,
+          supplierId: payment.supplierId,
+          customersMap,
+          suppliersMap,
+        }),
+        amount,
+        originalAmount: Math.abs(toNumber(payment.amount)),
+        currency,
+        effect:
+          payment.type === "income"
+            ? "داخل"
+            : payment.type === "expense"
+              ? "خارج"
+              : "-",
+        date: payment.date || "",
+        status: "-",
+        note: payment.note || "-",
+        sortTime: parseFinancialDate(payment.date),
+      };
+    });
+
+    const purchases = (data?.purchases || []).map((purchase) => {
+      const currency = normalizeCurrency(purchase.currency);
+      const amount = getOperationAmount(
+        purchase.currency,
+        purchase.totalPrice,
+        purchase.amount_base,
+      );
+      const status = getStatusLabel(purchase.paymentStatus);
+
+      return {
+        id: purchase.id || `purchase-${purchase.date || purchase.code}`,
+        operationType: "purchase" as const,
+        operationLabel: "شراء",
+        subType: "فاتورة شراء",
+        reference: purchase.id || purchase.code || "-",
+        description: `شراء ${purchase.name || purchase.code || purchase.id || ""}`.trim(),
+        partyName: getPartyName({
+          supplierId: purchase.supplierId,
+          customersMap,
+          suppliersMap,
+        }),
+        amount,
+        originalAmount: toNumber(purchase.totalPrice),
+        currency,
+        effect: purchase.paymentStatus === "cash" ? "خارج" : "ذمم",
+        date: purchase.date || "",
+        status,
+        note:
+          purchase.remainingDebt != null
+            ? `المتبقي ${formatAmount(toNumber(purchase.remainingDebt))}`
+            : "-",
+        sortTime: parseFinancialDate(purchase.date),
+      };
+    });
+
+    const sells = (data?.sells || []).map((sell) => {
+      const currency = normalizeCurrency(sell.currency);
+      const amount = getOperationAmount(sell.currency, sell.totalPrice, sell.amount_base);
+      const status = getStatusLabel(sell.paymentStatus);
+
+      return {
+        id: sell.id || `sell-${sell.date}`,
+        operationType: "sell" as const,
+        operationLabel: "بيع",
+        subType: "فاتورة بيع",
+        reference: sell.id || "-",
+        description:
+          sell.products && sell.products.length > 0
+            ? `بيع ${sell.products
+                .map((product) => product.name)
+                .filter(Boolean)
+                .join(", ")}`
+            : `بيع ${sell.id || ""}`.trim(),
+        partyName: getPartyName({
+          customerId: sell.customerId,
+          customersMap,
+          suppliersMap,
+        }),
+        amount,
+        originalAmount: toNumber(sell.totalPrice),
+        currency,
+        effect: sell.paymentStatus === "cash" ? "داخل" : "ذمم",
+        date: sell.date || "",
+        status,
+        note:
+          sell.remainingDebt != null
+            ? `المتبقي ${formatAmount(toNumber(sell.remainingDebt))}`
+            : "-",
+        sortTime: parseFinancialDate(sell.date),
+      };
+    });
+
+    const returns = (data?.returns || []).map((item) => {
+      const supplierReturn = isSupplierReturn(item);
+      const date = getReturnDate(item);
+      const currency = normalizeCurrency(item.currency);
+      const amount = getOperationAmount(
+        item.currency,
+        item.returnValue ?? item.totalPrice,
+        item.amount_base,
+      );
+      const partyName = supplierReturn
+        ? item.supplierName ||
+          getPartyName({
+            supplierId: item.supplierId,
+            customersMap,
+            suppliersMap,
+          })
+        : item.customerName ||
+          getPartyName({
+            customerId: item.customerId,
+            customersMap,
+            suppliersMap,
+          });
+
+      return {
+        id: item.id || `return-${date || item.referenceId}`,
+        operationType: "return" as const,
+        operationLabel: "مرتجع",
+        subType: supplierReturn ? "مرتجع مورد" : "مرتجع عميل",
+        reference:
+          item.invoiceNumber ||
+          item.referenceId ||
+          item.sellId?.toString() ||
+          item.purchaseId?.toString() ||
+          "-",
+        description: `${supplierReturn ? "مرتجع إلى مورد" : "مرتجع من عميل"} ${
+          item.productName || item.name || item.code || ""
+        }`.trim(),
+        partyName,
+        amount,
+        originalAmount: toNumber(item.returnValue ?? item.totalPrice),
+        currency,
+        effect: supplierReturn ? "داخل" : "خارج",
+        date,
+        status: "-",
+        note: item.reason || "-",
+        sortTime: parseFinancialDate(date),
+      };
+    });
+
+    return [...payments, ...purchases, ...sells, ...returns].sort(
+      (a, b) => b.sortTime - a.sortTime,
+    );
+  }, [
+    customersMap,
+    data?.payments,
+    data?.purchases,
+    data?.returns,
+    data?.sells,
+    suppliersMap,
+  ]);
+
+  const currencies = useMemo(
+    () => Array.from(new Set(operations.map((operation) => operation.currency))),
+    [operations],
+  );
+
+  const filteredOperations = useMemo(() => {
+    let items = operations;
 
     if (selectedType !== "all") {
-      data = data.filter((p) => p.type === selectedType);
+      items = items.filter((operation) => operation.operationType === selectedType);
+    }
+
+    if (selectedCurrency !== "all") {
+      items = items.filter((operation) => operation.currency === selectedCurrency);
     }
 
     if (dateRange?.from && dateRange?.to) {
-      data = data.filter((p) => {
-        if (!p.date) return false;
-        const paymentDate = new Date(p.date);
-        return paymentDate >= dateRange.from && paymentDate <= dateRange.to;
+      const from = new Date(dateRange.from);
+      from.setHours(0, 0, 0, 0);
+
+      const to = new Date(dateRange.to);
+      to.setHours(23, 59, 59, 999);
+
+      items = items.filter((operation) => {
+        if (!operation.sortTime) return false;
+        return operation.sortTime >= from.getTime() && operation.sortTime <= to.getTime();
       });
     }
 
-    return data;
-  }, [payments, selectedType, dateRange]);
+    return items;
+  }, [dateRange, operations, selectedCurrency, selectedType]);
 
-  // ---------------- الأعمدة ----------------
-  const paymentsColumns = [
-    { label: "المعرف", key: "id", hidden: true },
-    { label: "النوع", key: "type", sortable: true },
-    { label: "المبلغ", key: "amount", sortable: true },
-    { label: "الوصف", key: "note", sortable: true },
-    {
-      label: "التاريخ",
-      key: "date",
-      sortable: true,
-    },
-  ];
+  const operationsCount = filteredOperations.length;
 
-  // ---------------- إحصائيات ----------------
-  const returns = useMemo(() => {
-    return (
-      filteredPayments
-        ?.filter((c) => c.type === "return")
-        .reduce((sum, c) => sum + Number(c.amount), 0) || 0
-    );
-  }, [filteredPayments]);
+  const purchasesTotal = useMemo(
+    () =>
+      filteredOperations
+        .filter((operation) => operation.operationType === "purchase")
+        .reduce((sum, operation) => sum + operation.amount, 0),
+    [filteredOperations],
+  );
 
-const todaystotals = useMemo(() => {
-  const today = new Date().toISOString().split("T")[0];
+  const sellsTotal = useMemo(
+    () =>
+      filteredOperations
+        .filter((operation) => operation.operationType === "sell")
+        .reduce((sum, operation) => sum + operation.amount, 0),
+    [filteredOperations],
+  );
 
-  return payments
-    ?.filter((c) => {
-      if (!c.date) return false;
+  const returnsTotal = useMemo(
+    () =>
+      filteredOperations
+        .filter((operation) => operation.operationType === "return")
+        .reduce((sum, operation) => sum + operation.amount, 0),
+    [filteredOperations],
+  );
 
-      const date = new Date(c.date);
+  const cashInTotal = useMemo(
+    () =>
+      filteredOperations
+        .filter((operation) => operation.effect === "داخل")
+        .reduce((sum, operation) => sum + operation.amount, 0),
+    [filteredOperations],
+  );
 
-      if (isNaN(date.getTime())) return false;
+  const cashOutTotal = useMemo(
+    () =>
+      filteredOperations
+        .filter((operation) => operation.effect === "خارج")
+        .reduce((sum, operation) => sum + operation.amount, 0),
+    [filteredOperations],
+  );
 
-      return date.toISOString().split("T")[0] === today;
-    })
-    .reduce<Record<string, number>>((acc, curr) => {
-      const currency = curr.currency.toUpperCase();
-
-      const value = currency === "USD" ? curr.amount : curr.amount_base;
-
-      acc[currency] = (acc[currency] || 0) + value;
-
-      return acc;
-    }, {});
-}, [payments]);
-  const totals = useMemo(() => {
-    return payments?.reduce<Record<string, number>>((acc, curr) => {
-      const currency = curr.currency.toUpperCase();
-
-      const value = currency === "USD" ? Number(curr.amount) : Number(curr.amount_base);
-
-      acc[currency] = (acc[currency] || 0) + value;
-
-      return acc;
-    }, {});
-  }, [payments]);
+  const netCashMovement = cashInTotal - cashOutTotal;
 
   return (
     <DashboardLayout>
       <div dir="rtl" className="space-y-6">
-        {/* البطاقات الإحصائية */}
-        { isLoading ? <Loading /> :
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {todaystotals &&
-              Object.entries(todaystotals).map(([currency, total]) => (
-                <StatsCard
-                  title="صندوق اليوم"
-                  value={total.toLocaleString("en-US") || 0}
-                  icon={Wallet}
-                  description={currency}
-                />
-              ))}
-
-            {totals &&
-              Object.entries(totals).map(([currency, total]) => (
-                <div>
-                  <StatsCard
-                    title="الرصيد الحالي"
-                    value={total.toLocaleString("en-US") || 0}
-                    icon={TrendingUp}
-                    description={currency}
-                    onlyAdmin={true}
-                  />
-                </div>
-              ))}
+        {isLoading ? (
+          <Loading />
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <StatsCard
-              title="إجمالي المرتجع"
-              value={returns.toLocaleString("en-US")}
+              title="عدد العمليات"
+              value={operationsCount.toLocaleString("en-US")}
+              icon={ReceiptText}
+            />
+            <StatsCard
+              title="إجمالي المبيعات"
+              value={formatAmount(sellsTotal)}
+              icon={Wallet}
+            />
+            <StatsCard
+              title="إجمالي المشتريات"
+              value={formatAmount(purchasesTotal)}
+              icon={ShoppingCart}
+            />
+            <StatsCard
+              title="إجمالي المرتجعات"
+              value={formatAmount(returnsTotal)}
+              icon={RotateCcw}
+            />
+            <StatsCard
+              title="الداخل"
+              value={formatAmount(cashInTotal)}
+              icon={ArrowUpCircle}
+            />
+            <StatsCard
+              title="الخارج"
+              value={formatAmount(cashOutTotal)}
               icon={ArrowDownCircle}
             />
+            <StatsCard
+              title="صافي الحركة"
+              value={formatAmount(netCashMovement)}
+              icon={ReceiptText}
+              description={netCashMovement >= 0 ? "فائض حركة" : "عجز حركة"}
+            />
           </div>
-        }
+        )}
 
         <Card>
-          <CardHeader className="flex flex-col">
+          <CardHeader className="flex flex-col gap-4">
             <div>
-              <h1 className="font-bold text-2xl mb-4">الحركة المالية</h1>
-              <div className="flex gap-2">
+              <h1 className="mb-4 text-2xl font-bold">العمليات المالية</h1>
+              <div className="flex flex-wrap gap-2">
                 <AddBalanceForm isOpen={isOpen} setIsOpen={setIsOpen} />
                 <TakeBalanceForm isOpen={isOpenPay} setIsOpen={setIsOpenPay} />
               </div>
             </div>
+
             <div className="flex flex-wrap gap-3">
-              {/* الفلاتر */}
               <Select value={selectedType} onValueChange={setSelectedType}>
                 <SelectTrigger className="w-40">
                   <SelectValue placeholder="نوع العملية" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
-                  <SelectItem value="income">إيراد</SelectItem>
-                  <SelectItem value="expense">مصروف</SelectItem>
+                  <SelectItem value="purchase">شراء</SelectItem>
+                  <SelectItem value="sell">بيع</SelectItem>
+                  <SelectItem value="payment">دفعات</SelectItem>
+                  <SelectItem value="return">مرتجعات</SelectItem>
                 </SelectContent>
               </Select>
+
+              <Select value={selectedCurrency} onValueChange={setSelectedCurrency}>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="العملة" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">كل العملات</SelectItem>
+                  {currencies.map((currency) => (
+                    <SelectItem key={currency} value={currency}>
+                      {currency}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
@@ -208,18 +638,29 @@ const todaystotals = useMemo(() => {
                   />
                 </PopoverContent>
               </Popover>
+
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setDateRange(undefined);
+                  setSelectedType("all");
+                  setSelectedCurrency("all");
+                }}
+              >
+                مسح الفلاتر
+              </Button>
             </div>
           </CardHeader>
+
           <CardContent>
-            {isLoading ? (
-              <Loading />
-            ) : (
-              <DataTable
-                title=""
-                columns={paymentsColumns}
-                data={filteredPayments ? [...filteredPayments].reverse() : []}
-              />
-            )}
+            <DataTable
+              title=""
+              columns={operationsColumns}
+              data={filteredOperations}
+              isLoading={isLoading}
+              defaultPageSize={10}
+              pageSizeOptions={[10, 20, 50]}
+            />
           </CardContent>
         </Card>
       </div>

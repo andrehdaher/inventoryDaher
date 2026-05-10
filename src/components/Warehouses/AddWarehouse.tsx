@@ -73,7 +73,7 @@ const AddWarehouse = ({ isOpen, setIsOpen }: AddWarehouseProps) => {
 
         {/* Actions */}
         <div className="flex justify-end gap-2 pt-2">
-          <Button className="w-full" type="submit" disabled={addWarehouseMutation.isPending}>
+          <Button className="w-full" type="submit" disabled={addWarehouseMutation.isPending} loading={addWarehouseMutation.isPending}>
             {addWarehouseMutation.isPending ? "جاري الحفظ..." : "حفظ"}
           </Button>
         </div>

@@ -1,22 +1,30 @@
 import apiClient from "@/lib/axios";
 
 export interface sell {
-  id?: string; // معرّف الفاتورة
-  customerId: string; // معرف الزبون (يمكن يكون null لو بيع مباشر بدون زبون)
-  totalPrice: number; // المجموع الكلي للفاتورة
-  paymentStatus: "cash" | "part" | "debt"; // حالة الدفع
-  remainingDebt: number; // المبلغ المتبقي على الزبون
+  id?: string;
+  customerId: string;
+  totalPrice: number;
+  paymentStatus: "cash" | "part" | "debt";
+  remainingDebt: number;
+  paymentAccountId?: string;
+  receivableAccountId?: string;
+  salesAccountId?: string;
   products: {
-    productId: string; // معرف المنتج
-    code: string; // كود المنتج
-    name: string; // اسم المنتج
-    warehouse: string; // المستودع
-    quantity: number; // الكمية المباعة
-    sellPrice: number; // سعر الوحدة عند البيع
-    unit?: string; // وحدة القياس (اختياري)
-    totalPrice: number; // السعر الإجمالي (quantity * sellPrice)
+    productId?: string;
+    code: string;
+    id: string;
+    name: string;
+    warehouse: string;
+    quantity?: number;
+    qty: number;
+    sellPrice: number;
+    unit?: string;
+    totalPrice?: number;
+    payPrice?: number;
+    category?: string;
+    updatedDate?: string;
   }[];
-  date?: string; // تاريخ العملية
+  date?: string;
   currency: string;
   exchangeRate: number;
   amount_base: number;
@@ -25,6 +33,9 @@ export interface sell {
 
 export interface returnData {
   productCode: string;
+  productName?: string;
+  customerName?: string;
+  supplierName?: string;
   supplierId?: string;
   customerId?: string;
   warehouse: string;
@@ -33,6 +44,11 @@ export interface returnData {
   referenceId: string;
   productId: string;
   reason: string;
+  inventoryAccountId?: string;
+  payableAccountId?: string;
+  paymentAccountId?: string;
+  receivableAccountId?: string;
+  salesAccountId?: string;
 }
 
 export interface Product {
@@ -62,6 +78,9 @@ export interface purchase {
   exchangeRate: number;
   amount_base: number;
   remainingDebt: number;
+  inventoryAccountId: string;
+  payableAccountId: string;
+  paymentAccountId?: string;
   date: string;
 }
 
@@ -78,7 +97,7 @@ export async function payNewProduct({
       newProduct,
     });
     return response.data;
-  } catch (err) {
+  } catch (err: any) {
     console.error("خطأ في تسجيل الدخول:", err);
 
     if (err.response && err.response.data?.message) {
@@ -95,7 +114,7 @@ export async function sellProducts({ newSell }: { newSell: sell }) {
       newSell,
     });
     return response.data;
-  } catch (err) {
+  } catch (err: any) {
     console.error("خطأ في تسجيل الدخول:", err);
 
     if (err.response && err.response.data?.message) {
@@ -125,7 +144,7 @@ export async function endExchange({
       id,
     });
     return response.data;
-  } catch (err) {
+  } catch (err: any) {
     console.error("خطأ في تسجيل الدخول:", err);
 
     if (err.response && err.response.data?.message) {
@@ -143,6 +162,8 @@ export async function payCustomerDebt(dataToSend: {
   currency: string;
   exchangeRate: number;
   amount_base: number;
+  paymentAccountId: string;
+  receivableAccountId: string;
 }) {
   try {
     const response = await apiClient.post("/api/transactions/customerPayment", {
@@ -153,11 +174,13 @@ export async function payCustomerDebt(dataToSend: {
         currency: dataToSend.currency,
         exchangeRate: dataToSend.exchangeRate,
         amount_base: dataToSend.amount_base,
+        paymentAccountId: dataToSend.paymentAccountId,
+        receivableAccountId: dataToSend.receivableAccountId,
         type: "income",
       },
     });
     return response.data;
-  } catch (err) {
+  } catch (err: any) {
     console.error("خطأ :", err);
 
     if (err.response && err.response.data?.message) {
@@ -175,6 +198,8 @@ export async function paySupplierDebt(dataToSend: {
   currency: string;
   exchangeRate: number;
   amount_base: number;
+  paymentAccountId: string;
+  payableAccountId: string;
 }) {
   try {
     const response = await apiClient.post("/api/transactions/supplierPayment", {
@@ -185,11 +210,13 @@ export async function paySupplierDebt(dataToSend: {
         currency: dataToSend.currency,
         exchangeRate: dataToSend.exchangeRate,
         amount_base: dataToSend.amount_base,
+        paymentAccountId: dataToSend.paymentAccountId,
+        payableAccountId: dataToSend.payableAccountId,
         type: "expense",
       },
     });
     return response.data;
-  } catch (err) {
+  } catch (err: any) {
     console.error("خطأ :", err);
 
     if (err.response && err.response.data?.message) {
@@ -202,6 +229,8 @@ export async function paySupplierDebt(dataToSend: {
 
 export async function handleCustomerReturn(newReturn: {
   productCode: string;
+  productName?: string;
+  customerName?: string;
   customerId: string;
   warehouse: string;
   qty: number;
@@ -211,11 +240,16 @@ export async function handleCustomerReturn(newReturn: {
   partValue: number;
   productId: string;
   reason: string;
+  paymentAccountId?: string;
+  receivableAccountId?: string;
+  salesAccountId?: string;
 }) {
   try {
     const response = await apiClient.post("/api/transactions/CustomerReturn", {
       newReturn: {
         productCode: newReturn.productCode,
+        productName: newReturn.productName,
+        customerName: newReturn.customerName,
         customerId: newReturn.customerId,
         warehouse: newReturn.warehouse,
         qty: newReturn.qty,
@@ -225,10 +259,13 @@ export async function handleCustomerReturn(newReturn: {
         returnType: newReturn.returnType,
         partValue: newReturn.partValue,
         reason: newReturn.reason,
+        paymentAccountId: newReturn.paymentAccountId,
+        receivableAccountId: newReturn.receivableAccountId,
+        salesAccountId: newReturn.salesAccountId,
       },
     });
     return response.data;
-  } catch (err) {
+  } catch (err: any) {
     console.error("خطأ :", err);
 
     if (err.response && err.response.data?.message) {
@@ -241,6 +278,8 @@ export async function handleCustomerReturn(newReturn: {
 
 export async function handleSupplierReturn(newReturn: {
   productCode: string;
+  productName?: string;
+  supplierName?: string;
   supplierId: string;
   warehouse: string;
   qty: number;
@@ -250,24 +289,32 @@ export async function handleSupplierReturn(newReturn: {
   partValue: number;
   productId: string;
   reason: string;
+  inventoryAccountId?: string;
+  payableAccountId?: string;
+  paymentAccountId?: string;
 }) {
   try {
     const response = await apiClient.post("/api/transactions/SupplierReturn", {
       newReturn: {
         productCode: newReturn.productCode,
+        productName: newReturn.productName,
+        supplierName: newReturn.supplierName,
         supplierId: newReturn.supplierId,
         warehouse: newReturn.warehouse,
         qty: newReturn.qty,
         returnValue: newReturn.returnValue,
-        referenceId: newReturn.productId,
+        referenceId: newReturn.referenceId,
         productId: newReturn.productId,
         returnType: newReturn.returnType,
         partValue: newReturn.partValue,
         reason: newReturn.reason,
+        inventoryAccountId: newReturn.inventoryAccountId,
+        payableAccountId: newReturn.payableAccountId,
+        paymentAccountId: newReturn.paymentAccountId,
       },
     });
     return response.data;
-  } catch (err) {
+  } catch (err: any) {
     console.error("خطأ :", err);
 
     if (err.response && err.response.data?.message) {
@@ -289,6 +336,8 @@ export async function handleWarehouseTransfare(transferData: {
   quantity: number;
   note: string;
   newSellPrice?: number;
+  expenseAccountId?: string;
+  paymentAccountId?: string;
 }) {
   try {
     const response = await apiClient.post(
@@ -298,7 +347,7 @@ export async function handleWarehouseTransfare(transferData: {
       },
     );
     return response.data;
-  } catch (err) {
+  } catch (err: any) {
     console.error("خطأ :", err);
 
     if (err.response && err.response.data?.message) {
@@ -309,7 +358,15 @@ export async function handleWarehouseTransfare(transferData: {
   }
 }
 
-export async function handleAfterSellDiscount({ discount, sellId, customerId }: { discount: number; sellId: string; customerId: string }) {
+export async function handleAfterSellDiscount({
+  discount,
+  sellId,
+  customerId,
+}: {
+  discount: number;
+  sellId: string;
+  customerId: string;
+}) {
   try {
     const response = await apiClient.post(
       "/api/transactions/afterSellDiscount",
@@ -320,7 +377,7 @@ export async function handleAfterSellDiscount({ discount, sellId, customerId }: 
       },
     );
     return response.data;
-  } catch (err) {
+  } catch (err: any) {
     console.error("خطأ :", err);
 
     if (err.response && err.response.data?.message) {

@@ -1,4 +1,5 @@
 import React from "react";
+import AccountSelect from "../Accounts/AccountSelect";
 import PopupForm from "../ui/custom/PopupForm";
 import { Button } from "../ui/button";
 import FormInput from "../ui/custom/FormInput";
@@ -9,6 +10,11 @@ import { toast } from "sonner";
 export default function CustomerSelect({ isOpen, setIsOpen, className }) {
   const [customerName, setCustomerName] = React.useState("");
   const [customerNumber, setCustomerNumber] = React.useState("");
+  const [defaultPaymentAccountId, setDefaultPaymentAccountId] =
+    React.useState("");
+  const [defaultReceivableAccountId, setDefaultReceivableAccountId] =
+    React.useState("");
+  const [defaultSalesAccountId, setDefaultSalesAccountId] = React.useState("");
   const queryClient = useQueryClient();
 
   const addCustomerMutation = useMutation({
@@ -17,9 +23,10 @@ export default function CustomerSelect({ isOpen, setIsOpen, className }) {
     onSuccess: () => {
       setCustomerName("");
       setCustomerNumber("");
-
+      setDefaultPaymentAccountId("");
+      setDefaultReceivableAccountId("");
+      setDefaultSalesAccountId("");
       setIsOpen(false);
-
       queryClient.invalidateQueries({
         queryKey: ["customers-table"],
       });
@@ -46,18 +53,21 @@ export default function CustomerSelect({ isOpen, setIsOpen, className }) {
       }
     >
       <form
-        action=""
         className="space-y-4"
-        onSubmit={() => {
+        onSubmit={(e) => {
+          e.preventDefault();
           if (!customerName || !customerNumber) {
             toast.error("يرجى ملء جميع الحقول");
             return;
-          } else {
-            addCustomerMutation.mutate({
-              name: customerName,
-              number: customerNumber,
-            });
           }
+
+          addCustomerMutation.mutate({
+            name: customerName,
+            number: customerNumber,
+            defaultPaymentAccountId,
+            defaultReceivableAccountId,
+            defaultSalesAccountId,
+          });
         }}
       >
         <FormInput
@@ -73,11 +83,30 @@ export default function CustomerSelect({ isOpen, setIsOpen, className }) {
           value={customerNumber}
           onChange={(e) => setCustomerNumber(e.target.value)}
         />
+        <AccountSelect
+          label="حساب القبض الافتراضي"
+          value={defaultPaymentAccountId}
+          onChange={setDefaultPaymentAccountId}
+          filterType="payment"
+        />
+        <AccountSelect
+          label="حساب العملاء الافتراضي"
+          value={defaultReceivableAccountId}
+          onChange={setDefaultReceivableAccountId}
+          filterType="receivable"
+        />
+        <AccountSelect
+          label="حساب المبيعات الافتراضي"
+          value={defaultSalesAccountId}
+          onChange={setDefaultSalesAccountId}
+          filterType="sales"
+        />
 
         <Button
           type="submit"
           className="w-full"
           disabled={addCustomerMutation.isPending}
+          loading={addCustomerMutation.isPending}
         >
           {addCustomerMutation.isPending ? "جاري الإضافة..." : "اضافة"}
         </Button>

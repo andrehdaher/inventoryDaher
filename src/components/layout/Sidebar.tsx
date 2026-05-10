@@ -7,9 +7,18 @@ import {
   ShoppingCart,
   Users2,
   FileText,
+  BrainCircuit,
+  ChartNoAxesCombined,
   Warehouse,
   UserPlus,
   Shapes,
+  Book,
+  BookOpen,
+  ScrollText,
+  Scale,
+  TrendingUp,
+  ClipboardList,
+  Truck,
   
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -20,8 +29,20 @@ const navigationGroups = [
     name: "All Products",
     href: "/Products",
     icon: Package,
+    allowed: ["admin" , 'user' ],
+  },
+  {
+    name: "Inventory Balances",
+    href: "/inventory-balances",
+    icon: ClipboardList,
     allowed: ["admin"],
   },
+  // {
+  //   name: "Purchases",
+  //   href: "/purchases",
+  //   icon: Truck,
+  //   allowed: ["admin"],
+  // },
   {
     name: "Sell Product",
     href: "/SellProduct",
@@ -58,6 +79,54 @@ const navigationGroups = [
     icon: Shapes,
     allowed: ["admin"],
   },
+  {
+  name: "Chart of Accounts",
+  href: "/accounts",
+  icon: Book,
+  allowed: ["admin"],
+},
+{
+  name: "Journal Entries",
+  href: "/journal-entries",
+  icon: ScrollText,
+  allowed: ["admin"],
+},
+{
+  name: "Trial Balance",
+  href: "/trial-balance",
+  icon: Scale,
+  allowed: ["admin"],
+},
+{
+  name: "General Ledger",
+  href: "/general-ledger",
+  icon: BookOpen,
+  allowed: ["admin"],
+},
+{
+  name: "Income Statement",
+  href: "/income-statement",
+  icon: ChartNoAxesCombined,
+  allowed: ["admin"],
+},
+{
+  name: "Profit Analysis",
+  href: "/profit-analysis",
+  icon: TrendingUp,
+  allowed: ["admin"],
+},
+{
+  name: "AI Reports",
+  href: "/ai-reports",
+  icon: BrainCircuit,
+  allowed: ["admin"],
+},
+{
+  name: "Ask AI",
+  href: "/ai-chat",
+  icon: BrainCircuit,
+  allowed: ["admin"],
+}
   // {
   //   name: "Exchange",
   //   href: "/Exchange",
@@ -109,7 +178,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
       </div>
 
       {/* Dashboard Link */}
-      {["admin"].includes(user?.role) && (
+      {["admin", "user"].includes(user?.role) && (
         <nav className="px-2 py-3">
           <Link
             to="/dashboard"

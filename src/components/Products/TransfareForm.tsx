@@ -1,10 +1,16 @@
 import { ProductTableRow } from "@/pages/Products";
+import { handleWarehouseTransfare } from "@/services/transaction";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
+import { toast } from "sonner";
+import { z } from "zod";
+import AccountSelect from "../Accounts/AccountSelect";
+import PaymentTypeSelector from "../sellProduct/PaymentTypeSelector";
+import { Button } from "../ui/button";
 import FormInput from "../ui/custom/FormInput";
 import PopupForm from "../ui/custom/PopupForm";
-import { Button } from "../ui/button";
-import PaymentTypeSelector from "../sellProduct/PaymentTypeSelector";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { handleWarehouseTransfare } from "@/services/transaction";
 import {
   Select,
   SelectContent,
@@ -13,11 +19,6 @@ import {
   SelectValue,
 } from "../ui/select";
 import WarehouseSelect from "../Warehouses/WarehouseSelect";
-import { Controller, useForm } from "react-hook-form";
-import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
 
 interface TransferFormProps {
   row: ProductTableRow;
@@ -25,15 +26,13 @@ interface TransferFormProps {
   setIsOpen: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
-/* ---------------------------------- */
-/* ✅ Schema Validation */
-/* ---------------------------------- */
 const transferSchema = z.object({
   warehouse: z.string().min(1, "اختر المستودع المنقول إليه"),
   quantity: z.coerce.number().positive("الكمية يجب أن تكون أكبر من صفر"),
   sellPrice: z.coerce.number().positive("سعر المبيع غير صحيح"),
   amount: z.coerce.number().min(0, "تكلفة النقل غير صحيحة"),
   currency: z.enum(["USD", "SYP"]),
+  exchangeRate: z.coerce.number().positive("سعر الصرف غير صحيح"),
   note: z.string().optional(),
 });
 
@@ -45,18 +44,17 @@ export default function TransferForm({
   setIsOpen,
 }: TransferFormProps) {
   const queryClient = useQueryClient();
-
   const [isDebt, setIsDebt] = useState<"cash" | "debt" | "part">("cash");
   const [partValue, setPartValue] = useState(0);
+  const [expenseAccountId, setExpenseAccountId] = useState("");
+  const [paymentAccountId, setPaymentAccountId] = useState("");
 
-  /* ---------------------------------- */
-  /* ✅ React Hook Form */
-  /* ---------------------------------- */
   const {
     control,
     handleSubmit,
     reset,
     setValue,
+    watch,
     formState: { errors },
   } = useForm<TransferFormValues>({
     resolver: zodResolver(transferSchema),
@@ -66,13 +64,14 @@ export default function TransferForm({
       sellPrice: row.sellPrice,
       amount: 0,
       currency: "USD",
+      exchangeRate: 1,
       note: "",
     },
   });
 
-  /* ---------------------------------- */
-  /* ✅ Reset when row changes */
-  /* ---------------------------------- */
+  const transferAmount = Number(watch("amount") || 0);
+  const currency = watch("currency");
+
   useEffect(() => {
     if (!row) return;
 
@@ -82,13 +81,13 @@ export default function TransferForm({
       sellPrice: row.sellPrice,
       amount: 0,
       currency: "USD",
+      exchangeRate: 1,
       note: "",
     });
+    setExpenseAccountId("");
+    setPaymentAccountId("");
   }, [row, reset]);
 
-  /* ---------------------------------- */
-  /* ✅ Mutation */
-  /* ---------------------------------- */
   const warehouseTransfare = useMutation({
     mutationFn: (transferData: {
       productId: string;
@@ -101,24 +100,20 @@ export default function TransferForm({
       quantity: number;
       note: string;
       newSellPrice?: number;
+      expenseAccountId?: string;
+      paymentAccountId?: string;
     }) => handleWarehouseTransfare(transferData),
-
     onSuccess: () => {
       setIsOpen(false);
-
       queryClient.invalidateQueries({ queryKey: ["products-table"] });
       queryClient.invalidateQueries({ queryKey: ["warehouses-table"] });
     },
-
     onError: (error) => {
       console.error(error);
       toast.error("حدث خطأ أثناء نقل المنتج");
     },
   });
 
-  /* ---------------------------------- */
-  /* ✅ Submit */
-  /* ---------------------------------- */
   const onSubmit = (values: TransferFormValues) => {
     if (values.quantity > row.quantity) {
       toast.error("الكمية المدخلة أكبر من الكمية المتوفرة");
@@ -135,23 +130,35 @@ export default function TransferForm({
       return;
     }
 
+    if (values.amount > 0 && !expenseAccountId) {
+      toast.error("الرجاء اختيار حساب أجور النقل");
+      return;
+    }
+
+    if (values.amount > 0 && !paymentAccountId) {
+      toast.error("الرجاء اختيار حساب الدفع");
+      return;
+    }
+
     warehouseTransfare.mutate({
       productId: row.id,
       oldWarehouse: row.warehouse,
       newWarehouse: values.warehouse,
-      exchangeRate: 0,
-      amount_base: values.amount,
+      exchangeRate: values.currency === "USD" ? 1 : values.exchangeRate,
+      amount_base:
+        values.currency === "USD"
+          ? values.amount
+          : values.amount * values.exchangeRate,
       amount: values.amount,
       currency: values.currency,
       quantity: values.quantity,
-      note: values.note,
+      note: values.note || "",
       newSellPrice: values.sellPrice,
+      expenseAccountId: values.amount > 0 ? expenseAccountId : undefined,
+      paymentAccountId: values.amount > 0 ? paymentAccountId : undefined,
     });
   };
 
-  /* ---------------------------------- */
-  /* ✅ Max Quantity */
-  /* ---------------------------------- */
   const handleSetMaxQuantity = () => {
     setValue("quantity", row.quantity);
   };
@@ -164,14 +171,12 @@ export default function TransferForm({
       title="نقل منتج"
     >
       <form onSubmit={handleSubmit(onSubmit)}>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[75vh] overflow-y-auto overflow-x-hidden">
-          {/* معلومات ثابتة */}
+        <div className="grid grid-cols-1 gap-4 overflow-y-auto overflow-x-hidden max-h-[75vh] md:grid-cols-2">
           <FormInput label="اسم المنتج" disabled value={row.name} />
           <FormInput label="صنف المنتج" disabled value={row.category} />
-          <FormInput label="الواحدة" disabled value={row.unit} />
+          <FormInput label="الوحدة" disabled value={row.unit} />
           <FormInput label="المستودع القديم" disabled value={row.warehouse} />
 
-          {/* المستودع الجديد */}
           <Controller
             name="warehouse"
             control={control}
@@ -180,10 +185,9 @@ export default function TransferForm({
             )}
           />
           {errors.warehouse && (
-            <p className="text-red-500 text-sm">{errors.warehouse.message}</p>
+            <p className="text-sm text-red-500">{errors.warehouse.message}</p>
           )}
 
-          {/* الكمية */}
           <div className="flex">
             <Controller
               name="quantity"
@@ -208,10 +212,9 @@ export default function TransferForm({
             </Button>
           </div>
           {errors.quantity && (
-            <p className="text-red-500 text-sm">{errors.quantity.message}</p>
+            <p className="text-sm text-red-500">{errors.quantity.message}</p>
           )}
 
-          {/* سعر البيع */}
           <Controller
             name="sellPrice"
             control={control}
@@ -225,11 +228,10 @@ export default function TransferForm({
             )}
           />
           {errors.sellPrice && (
-            <p className="text-red-500 text-sm">{errors.sellPrice.message}</p>
+            <p className="text-sm text-red-500">{errors.sellPrice.message}</p>
           )}
 
-          {/* تكلفة النقل + العملة */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 md:col-span-1">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 md:col-span-1">
             <div className="sm:col-span-2">
               <Controller
                 name="amount"
@@ -254,9 +256,9 @@ export default function TransferForm({
                     <SelectValue placeholder="العملة" />
                   </SelectTrigger>
                   <SelectContent>
-                    {["SYP", "USD"].map((c) => (
-                      <SelectItem key={c} value={c}>
-                        {c}
+                    {["SYP", "USD"].map((item) => (
+                      <SelectItem key={item} value={item}>
+                        {item}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -265,7 +267,21 @@ export default function TransferForm({
             />
           </div>
 
-          {/* نوع الدفع */}
+          {currency === "SYP" && transferAmount > 0 && (
+            <Controller
+              name="exchangeRate"
+              control={control}
+              render={({ field }) => (
+                <FormInput
+                  type="number"
+                  label="سعر الصرف"
+                  value={field.value}
+                  onChange={(e) => field.onChange(Number(e.target.value))}
+                />
+              )}
+            />
+          )}
+
           <div className="md:col-span-2">
             <PaymentTypeSelector
               value={isDebt}
@@ -275,7 +291,23 @@ export default function TransferForm({
             />
           </div>
 
-          {/* الملاحظات */}
+          {transferAmount > 0 && (
+            <>
+              <AccountSelect
+                label="حساب أجور النقل"
+                value={expenseAccountId}
+                onChange={setExpenseAccountId}
+                filterType="expense"
+              />
+              <AccountSelect
+                label="حساب الدفع"
+                value={paymentAccountId}
+                onChange={setPaymentAccountId}
+                filterType="payment"
+              />
+            </>
+          )}
+
           <div className="md:col-span-2">
             <Controller
               name="note"
@@ -290,11 +322,11 @@ export default function TransferForm({
             />
           </div>
 
-          {/* زر الإرسال */}
           <Button
             type="submit"
             className="w-full md:col-span-2"
             disabled={warehouseTransfare.isPending}
+            loading={warehouseTransfare.isPending}
           >
             {warehouseTransfare.isPending ? "جاري النقل..." : "تأكيد"}
           </Button>

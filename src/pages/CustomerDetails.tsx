@@ -1,4 +1,5 @@
 import CustomerPaymentForm from "@/components/Customers/CustomerPaymentForm";
+import AccountSelect from "@/components/Accounts/AccountSelect";
 import DetailsInputs from "@/components/Customers/DetailsInputs";
 import { DataTable } from "@/components/dashboard/DataTable";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -47,6 +48,9 @@ export default function CustomerDetails() {
   const [reason, setReason] = useState("");
   const [currency, setCurrency] = useState("");
   const [exchangeRate, setExchangeRate] = useState(1);
+  const [paymentAccountId, setPaymentAccountId] = useState("");
+  const [receivableAccountId, setReceivableAccountId] = useState("");
+  const [salesAccountId, setSalesAccountId] = useState("");
 
   const payCustomerDebtMutation = useMutation({
     mutationFn: (dataToSend: any) => payCustomerDebt(dataToSend as any),
@@ -69,6 +73,8 @@ export default function CustomerDetails() {
   const returnMutation = useMutation({
     mutationFn: (dataToSend: {
       productCode: string;
+      productName?: string;
+      customerName?: string;
       customerId: string;
       warehouse: string;
       qty: number;
@@ -99,6 +105,9 @@ export default function CustomerDetails() {
   useEffect(() => {
     if (data?.data) {
       setCustomer(data.data);
+      setPaymentAccountId(data.data.defaultPaymentAccountId || "");
+      setReceivableAccountId(data.data.defaultReceivableAccountId || "");
+      setSalesAccountId(data.data.defaultSalesAccountId || "");
     }
   }, [data]);
 
@@ -184,7 +193,7 @@ export default function CustomerDetails() {
               <CustomerPaymentForm
                 isOpen={isOpen}
                 setIsOpen={setIsOpen}
-                customerData={customerId}
+                customerData={customer}
               />
               {/* إضافة دفعة */}
               <PopupForm
@@ -209,6 +218,10 @@ export default function CustomerDetails() {
                   className="space-y-4 mt-4"
                   onSubmit={(e) => {
                     e.preventDefault();
+                    if (!paymentAccountId || !receivableAccountId) {
+                      toast.error("يرجى تحديد حساب الدفع وحساب العملاء");
+                      return;
+                    }
                     payCustomerDebtMutation.mutate({
                       customerId: customerId.id,
                       amount:
@@ -219,6 +232,8 @@ export default function CustomerDetails() {
                       currency: currency,
                       exchangeRate: exchangeRate,
                       amount_base: -amount,
+                      paymentAccountId,
+                      receivableAccountId,
                     });
                   }}
                 >
@@ -235,6 +250,18 @@ export default function CustomerDetails() {
                     type="text"
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
+                  />
+                  <AccountSelect
+                    label="حساب الدفع"
+                    value={paymentAccountId}
+                    onChange={setPaymentAccountId}
+                    filterType="payment"
+                  />
+                  <AccountSelect
+                    label="حساب العملاء"
+                    value={receivableAccountId}
+                    onChange={setReceivableAccountId}
+                    filterType="receivable"
                   />
 
                   {!(isDebt == "debt") && (
@@ -264,7 +291,12 @@ export default function CustomerDetails() {
                     </>
                   )}
 
-                  <Button className="w-full" type="submit">
+                  <Button
+                    className="w-full"
+                    type="submit"
+                    disabled={payCustomerDebtMutation.isPending}
+                    loading={payCustomerDebtMutation.isPending}
+                  >
                     اضافة دفعة
                   </Button>
                 </form>
@@ -339,6 +371,18 @@ export default function CustomerDetails() {
                         className="space-y-4"
                         onSubmit={(e) => {
                           e.preventDefault();
+                          if (!salesAccountId || !receivableAccountId) {
+                            toast.error(
+                              "يرجى تحديد حساب المبيعات وحساب العملاء",
+                            );
+                            return;
+                          }
+
+                          if (isDebt !== "debt" && !paymentAccountId) {
+                            toast.error("يرجى تحديد حساب الدفع");
+                            return;
+                          }
+
                           const productsToReturn = row.products
                             .filter(
                               (p) => (Number(returnAmounts[p.id]) || 0) > 0,
@@ -346,6 +390,8 @@ export default function CustomerDetails() {
                             .map((p) => ({
                               productId: p.id,
                               productCode: p.code,
+                              productName: p.name,
+                              customerName: customer.name,
                               customerId: row.customerId,
                               warehouse: p.warehouse,
                               qty: -Number(returnAmounts[p.id]),
@@ -355,6 +401,9 @@ export default function CustomerDetails() {
                               partValue: partValue,
                               returnType: isDebt,
                               reason: reason,
+                              paymentAccountId,
+                              receivableAccountId,
+                              salesAccountId,
                             }));
 
                           productsToReturn.forEach((prod) => {
@@ -428,7 +477,32 @@ export default function CustomerDetails() {
                             setReason(e.target.value);
                           }}
                         />
-                        <Button type="submit" className="w-full">
+                        <AccountSelect
+                          label="حساب المبيعات"
+                          value={salesAccountId}
+                          onChange={setSalesAccountId}
+                          filterType="sales"
+                        />
+                        <AccountSelect
+                          label="حساب العملاء"
+                          value={receivableAccountId}
+                          onChange={setReceivableAccountId}
+                          filterType="receivable"
+                        />
+                        {isDebt !== "debt" && (
+                          <AccountSelect
+                            label="حساب الدفع"
+                            value={paymentAccountId}
+                            onChange={setPaymentAccountId}
+                            filterType="payment"
+                          />
+                        )}
+                        <Button
+                          type="submit"
+                          className="w-full"
+                          disabled={returnMutation.isPending}
+                          loading={returnMutation.isPending}
+                        >
                           تأكيد الإرجاع
                         </Button>
                       </form>

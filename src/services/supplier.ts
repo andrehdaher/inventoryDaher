@@ -9,11 +9,20 @@ export default async function getAllSupplier() {
     throw new Error("خطأ أثناء جلب الموردين");
   }
 }
-export async function addSupplier({ name, number }) {
+export async function addSupplier({
+  name,
+  number,
+  defaultPaymentAccountId,
+  defaultPayableAccountId,
+  defaultInventoryAccountId,
+}) {
   try {
     const response = await apiClient.post("/api/suppliers", {
       name,
       number,
+      defaultPaymentAccountId,
+      defaultPayableAccountId,
+      defaultInventoryAccountId,
     });
     return response.data;
   } catch (err) {
@@ -36,7 +45,13 @@ export async function getSupplierById({ id }: { id: string }) {
 
 export async function updateSupplier(id: string, data: Partial<any>) {
   try {
-    const response = await apiClient.put(`/api/suppliers/${id}`, {name: data.name, number: data.number});
+    const response = await apiClient.put(`/api/suppliers/${id}`, {
+      name: data.name,
+      number: data.number,
+      defaultPaymentAccountId: data.defaultPaymentAccountId,
+      defaultPayableAccountId: data.defaultPayableAccountId,
+      defaultInventoryAccountId: data.defaultInventoryAccountId,
+    });
     return response.data;
   } catch (err) {
     console.error("خطأ في تحديث العميل:", err);

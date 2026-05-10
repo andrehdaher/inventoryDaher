@@ -246,6 +246,7 @@ export function DataTable({
                 {renderRowActions && <TableHead>Actions</TableHead>}
               </TableRow>
             </TableHeader>
+
             <TableBody className="">
               {isLoading ? (
                 SKELETON_ROWS.map((_, rowIndex) => (
@@ -308,6 +309,7 @@ export function DataTable({
             </TableBody>
           </Table>
         </div>
+        
 
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center space-x-2">

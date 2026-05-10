@@ -17,12 +17,17 @@ export default async function getAllCustomer() {
 export async function addCustomer({
   name,
   number,
-
+  defaultPaymentAccountId,
+  defaultReceivableAccountId,
+  defaultSalesAccountId,
 }) {
   try {
     const response = await apiClient.post("/api/customers",{
       name,
-      number
+      number,
+      defaultPaymentAccountId,
+      defaultReceivableAccountId,
+      defaultSalesAccountId,
     });
     return response.data
     
@@ -45,7 +50,13 @@ export async function getCustomerById({ id }: { id: string }) {
 
 export async function updateCustomer(id: string, data: Partial<Customer>) {
   try {
-    const response = await apiClient.put(`/api/customers/${id}`, {name: data.name, number: data.number});
+    const response = await apiClient.put(`/api/customers/${id}`, {
+      name: data.name,
+      number: data.number,
+      defaultPaymentAccountId: data.defaultPaymentAccountId,
+      defaultReceivableAccountId: data.defaultReceivableAccountId,
+      defaultSalesAccountId: data.defaultSalesAccountId,
+    });
     return response.data;
   } catch (err) {
     console.error("خطأ في تحديث العميل:", err);

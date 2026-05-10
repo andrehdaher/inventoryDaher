@@ -1,4 +1,5 @@
 import React from "react";
+import AccountSelect from "../Accounts/AccountSelect";
 import PopupForm from "../ui/custom/PopupForm";
 import { Button } from "../ui/button";
 import FormInput from "../ui/custom/FormInput";
@@ -27,6 +28,12 @@ export default function SupplierSelect({
 }: SupplierSelectProps) {
   const [supplierName, setSupplierName] = React.useState("");
   const [supplierNumber, setSupplierNumber] = React.useState("");
+  const [defaultPaymentAccountId, setDefaultPaymentAccountId] =
+    React.useState("");
+  const [defaultPayableAccountId, setDefaultPayableAccountId] =
+    React.useState("");
+  const [defaultInventoryAccountId, setDefaultInventoryAccountId] =
+    React.useState("");
   const queryClient = useQueryClient();
 
   const addSupplierMutation = useMutation({
@@ -35,9 +42,10 @@ export default function SupplierSelect({
     onSuccess: () => {
       setSupplierName("");
       setSupplierNumber("");
-
+      setDefaultPaymentAccountId("");
+      setDefaultPayableAccountId("");
+      setDefaultInventoryAccountId("");
       !withDataTable && setIsOpen(false);
-
       queryClient.invalidateQueries({
         queryKey: ["suppliers-table"],
       });
@@ -92,7 +100,7 @@ export default function SupplierSelect({
               setIsOpen(false);
             }}
             columns={supplierColumns}
-            data={suppliers ? suppliers : []} /*loading={suppliersLoading}*/
+            data={suppliers ? suppliers : []}
           />
         ))}
 
@@ -109,6 +117,24 @@ export default function SupplierSelect({
         value={supplierNumber}
         onChange={(e) => setSupplierNumber(e.target.value)}
       />
+      <AccountSelect
+        label="حساب الدفع الافتراضي"
+        value={defaultPaymentAccountId}
+        onChange={setDefaultPaymentAccountId}
+        filterType="payment"
+      />
+      <AccountSelect
+        label="حساب الموردين الافتراضي"
+        value={defaultPayableAccountId}
+        onChange={setDefaultPayableAccountId}
+        filterType="payable"
+      />
+      <AccountSelect
+        label="حساب المخزون الافتراضي"
+        value={defaultInventoryAccountId}
+        onChange={setDefaultInventoryAccountId}
+        filterType="inventory"
+      />
 
       <Button
         type="button"
@@ -116,14 +142,19 @@ export default function SupplierSelect({
           if (!supplierName || !supplierNumber) {
             toast.error("يرجى ملء جميع الحقول");
             return;
-          } else {
-            addSupplierMutation.mutate({
-              name: supplierName,
-              number: supplierNumber,
-            });
           }
+
+          addSupplierMutation.mutate({
+            name: supplierName,
+            number: supplierNumber,
+            defaultPaymentAccountId,
+            defaultPayableAccountId,
+            defaultInventoryAccountId,
+          });
         }}
         className="w-full"
+        disabled={addSupplierMutation.isPending}
+        loading={addSupplierMutation.isPending}
       >
         {addSupplierMutation.isPending ? "جاري الإضافة..." : "اضافة"}
       </Button>

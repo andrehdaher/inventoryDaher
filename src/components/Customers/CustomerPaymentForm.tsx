@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import AccountSelect from "../Accounts/AccountSelect";
 import PopupForm from "../ui/custom/PopupForm";
 import { Button } from "../ui/button";
 import FormInput from "../ui/custom/FormInput";
@@ -13,15 +14,25 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { payCustomerDebt } from "@/services/transaction";
 import { toast } from "sonner";
 
-export default function CustomerPaymentForm({ isOpen, setIsOpen, customerData }) {
-  const [isDebt, setIsDebt] = useState<"cash" | "part" | "debt">("cash");
-  const [partValue, setPartValue] = useState(0);
+export default function CustomerPaymentForm({
+  isOpen,
+  setIsOpen,
+  customerData,
+}) {
   const [amount, setAmount] = useState(0);
   const [note, setNote] = useState("");
   const [currency, setCurrency] = useState("");
   const [exchangeRate, setExchangeRate] = useState(1);
+  const [paymentAccountId, setPaymentAccountId] = useState("");
+  const [receivableAccountId, setReceivableAccountId] = useState("");
 
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!customerData) return;
+    setPaymentAccountId(customerData.defaultPaymentAccountId || "");
+    setReceivableAccountId(customerData.defaultReceivableAccountId || "");
+  }, [customerData]);
 
   const payCustomerDebtMutation = useMutation({
     mutationFn: (dataToSend: any) => payCustomerDebt(dataToSend as any),
@@ -31,6 +42,8 @@ export default function CustomerPaymentForm({ isOpen, setIsOpen, customerData })
       setNote("");
       setCurrency("");
       setExchangeRate(1);
+      setPaymentAccountId(customerData?.defaultPaymentAccountId || "");
+      setReceivableAccountId(customerData?.defaultReceivableAccountId || "");
       setIsOpen(false);
       queryClient.invalidateQueries({ queryKey: ["customer-details"] });
     },
@@ -63,16 +76,24 @@ export default function CustomerPaymentForm({ isOpen, setIsOpen, customerData })
         className="space-y-4 mt-4"
         onSubmit={(e) => {
           e.preventDefault();
+
+          if (!paymentAccountId || !receivableAccountId) {
+            toast.error("الرجاء اختيار حساب القبض وحساب العملاء");
+            return;
+          }
+
           payCustomerDebtMutation.mutate({
             customerId: customerData.id,
             amount:
-              currency == "USD"
+              currency === "USD"
                 ? amount
                 : Number((amount / exchangeRate).toFixed(1)),
             note,
-            currency: currency,
-            exchangeRate: exchangeRate,
+            currency,
+            exchangeRate,
             amount_base: amount,
+            paymentAccountId,
+            receivableAccountId,
           });
         }}
       >
@@ -83,6 +104,7 @@ export default function CustomerPaymentForm({ isOpen, setIsOpen, customerData })
           value={amount.toString()}
           onChange={(e) => setAmount(Number(e.target.value))}
         />
+
         <FormInput
           label="ملاحظات"
           id="note"
@@ -91,32 +113,47 @@ export default function CustomerPaymentForm({ isOpen, setIsOpen, customerData })
           onChange={(e) => setNote(e.target.value)}
         />
 
-        {!(isDebt == "debt") && (
-          <>
-            {" "}
-            <Select value={currency} onValueChange={setCurrency}>
-              <SelectTrigger className="w-full mt-6">
-                <SelectValue placeholder="العملة المدفوع بها" />
-              </SelectTrigger>
-              <SelectContent>
-                {["SYP", "USD"].map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <FormInput
-              id="exchangeRate"
-              label="سعر الصرف"
-              value={currency == "USD" ? 1 : exchangeRate}
-              onChange={(e) => setExchangeRate(Number(e.target.value))}
-              disabled={currency === "USD"}
-            />
-          </>
-        )}
+        <Select value={currency} onValueChange={setCurrency}>
+          <SelectTrigger className="w-full mt-6">
+            <SelectValue placeholder="العملة المدفوع بها" />
+          </SelectTrigger>
+          <SelectContent>
+            {["SYP", "USD"].map((c) => (
+              <SelectItem key={c} value={c}>
+                {c}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-        <Button className="w-full" type="submit">
+        <FormInput
+          id="exchangeRate"
+          label="سعر الصرف"
+          value={currency === "USD" ? 1 : exchangeRate}
+          onChange={(e) => setExchangeRate(Number(e.target.value))}
+          disabled={currency === "USD"}
+        />
+
+        <AccountSelect
+          label="حساب القبض"
+          value={paymentAccountId}
+          onChange={setPaymentAccountId}
+          filterType="payment"
+        />
+
+        <AccountSelect
+          label="حساب العملاء"
+          value={receivableAccountId}
+          onChange={setReceivableAccountId}
+          filterType="receivable"
+        />
+
+        <Button
+          className="w-full"
+          type="submit"
+          disabled={payCustomerDebtMutation.isPending}
+          loading={payCustomerDebtMutation.isPending}
+        >
           اضافة دفعة
         </Button>
       </form>

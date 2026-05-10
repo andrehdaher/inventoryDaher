@@ -11,7 +11,9 @@ export const addProductSchema = z.object({
   quantity: z.coerce.number().positive(),
   unit: z.string().min(1),
   supplierId: z.string().min(1, "المورد مطلوب"),
-
+inventoryAccountId: z.string().min(1, "حساب المخزون مطلوب"),
+payableAccountId: z.string().min(1, "حساب الموردين مطلوب"),
+paymentAccountId: z.string().optional(),
   isDebt: z.enum(["cash", "part", "debt"]),
   partValue: z.coerce.number().optional(),
   currency: z.enum(["USD", "SYP"]).optional(),

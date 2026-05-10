@@ -1,3 +1,4 @@
+import AccountSelect from "@/components/Accounts/AccountSelect";
 import DetailsInputs from "@/components/Customers/DetailsInputs";
 import { DataTable } from "@/components/dashboard/DataTable";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -30,11 +31,11 @@ import { toast } from "sonner";
 export default function SupplierDetails() {
   const navigate = useNavigate();
   const location = useLocation();
-  const supplierId = location.state; // يفترض أن يكون ID فقط
+  const supplierId = location.state;
 
   const [isOpen, setIsOpen] = useState(false);
   const [isOpenTo, setIsOpenTo] = useState(false);
-  const [returnAmount, setReturnAmount] = useState('');
+  const [returnAmount, setReturnAmount] = useState("");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [isDebt, setIsDebt] = useState<"cash" | "part" | "debt">("cash");
@@ -42,34 +43,68 @@ export default function SupplierDetails() {
   const [reason, setReason] = useState("");
   const [currency, setCurrency] = useState("");
   const [exchangeRate, setExchangeRate] = useState(1);
-  const [openRowId, setOpenRowId] = useState<string>(null);
+  const [openRowId, setOpenRowId] = useState<string | null>(null);
+  const [paymentAccountId, setPaymentAccountId] = useState("");
+  const [payableAccountId, setPayableAccountId] = useState("");
+  const [inventoryAccountId, setInventoryAccountId] = useState("");
 
   const queryClient = useQueryClient();
   const [supplier, setSupplier] = useState<any>({});
 
-  // ✅ جلب بيانات المورد
   const { data, isLoading } = useQuery({
     queryKey: ["supplier-details", supplierId],
     queryFn: () => getSupplierById(supplierId),
     enabled: !!supplierId,
   });
 
-  console.log(data)
-
-  // ✅ تحديث الحالة عند وصول البيانات
   useEffect(() => {
     if (data?.data) {
       setSupplier(data.data);
+      setPaymentAccountId(data.data.defaultPaymentAccountId || "");
+      setPayableAccountId(data.data.defaultPayableAccountId || "");
+      setInventoryAccountId(data.data.defaultInventoryAccountId || "");
     }
   }, [data]);
 
-  // 🔹 دفعات المورد
+  const resetPaymentForm = () => {
+    setAmount("");
+    setNote("");
+    setCurrency("");
+    setExchangeRate(1);
+  };
+
+  const validateSupplierPaymentAccounts = () => {
+    if (!paymentAccountId || !payableAccountId) {
+      toast.error("الرجاء اختيار حساب الدفع وحساب الموردين");
+      return false;
+    }
+    return true;
+  };
+
+  const validateSupplierReturnAccounts = () => {
+    if (!inventoryAccountId) {
+      toast.error("الرجاء اختيار حساب المخزون");
+      return false;
+    }
+
+    if ((isDebt === "cash" || isDebt === "part") && !paymentAccountId) {
+      toast.error("الرجاء اختيار حساب الدفع");
+      return false;
+    }
+
+    if ((isDebt === "debt" || isDebt === "part") && !payableAccountId) {
+      toast.error("الرجاء اختيار حساب الموردين");
+      return false;
+    }
+
+    return true;
+  };
+
   const paySupplierDebtMutation = useMutation({
     mutationFn: (dataToSend: any) => paySupplierDebt(dataToSend as any),
     onSuccess: () => {
       toast.success("تم إضافة الدفعة بنجاح!");
-      setAmount("");
-      setNote("");
+      resetPaymentForm();
       setIsOpen(false);
       setIsOpenTo(false);
       queryClient.invalidateQueries({
@@ -82,10 +117,11 @@ export default function SupplierDetails() {
     },
   });
 
-  // 🔹 إرجاع منتجات المورد
   const returnMutation = useMutation({
     mutationFn: (dataToSend: {
       productCode: string;
+      productName?: string;
+      supplierName?: string;
       supplierId: string;
       warehouse: string;
       qty: number;
@@ -95,10 +131,15 @@ export default function SupplierDetails() {
       returnType: "debt" | "cash" | "part";
       partValue: number;
       reason: string;
+      inventoryAccountId?: string;
+      payableAccountId?: string;
+      paymentAccountId?: string;
     }) => handleSupplierReturn(dataToSend),
     onSuccess: () => {
       toast.success("تم الارجاع بنجاح!");
-      setReturnAmount('');
+      setReturnAmount("");
+      setReason("");
+      setPartValue(0);
       setOpenRowId(null);
       queryClient.invalidateQueries({
         queryKey: ["supplier-details"],
@@ -127,11 +168,18 @@ export default function SupplierDetails() {
     { label: "التاريخ", key: "date" },
   ];
 
-  const handleReturn = async (e: React.FormEvent, row) => {
+  const handleReturn = async (e: React.FormEvent, row: any) => {
     e.preventDefault();
+
+    if (!validateSupplierReturnAccounts()) {
+      return;
+    }
+
     try {
       const payload = {
         productCode: row.code,
+        productName: row.name,
+        supplierName: supplier.name,
         supplierId: supplierId.id,
         warehouse: row.warehouse,
         qty: -Number(returnAmount),
@@ -139,15 +187,16 @@ export default function SupplierDetails() {
         returnValue: Number(returnAmount) * row.payPrice,
         referenceId: row.id,
         productId: row.id,
-        partValue: partValue,
-        reason: reason,
+        partValue,
+        reason,
+        inventoryAccountId,
+        payableAccountId,
+        paymentAccountId,
       };
+
       returnMutation.mutate(payload);
     } catch (error: any) {
-      console.error(
-        "❌ خطأ أثناء الإرجاع:",
-        error.response?.data || error.message,
-      );
+      console.error("خطأ أثناء الإرجاع:", error.response?.data || error.message);
     }
   };
 
@@ -161,7 +210,6 @@ export default function SupplierDetails() {
           </Button>
         </div>
 
-        {/* معلومات أساسية */}
         <Card>
           <CardHeader>
             <CardTitle>المعلومات الأساسية</CardTitle>
@@ -174,7 +222,6 @@ export default function SupplierDetails() {
             />
 
             <div className="grid grid-cols-2 gap-4">
-              {/* دفعة من المورد */}
               <PopupForm
                 title="دفعة من المورد"
                 trigger={
@@ -197,29 +244,33 @@ export default function SupplierDetails() {
                   className="space-y-4 mt-4"
                   onSubmit={(e) => {
                     e.preventDefault();
+                    if (!validateSupplierPaymentAccounts()) return;
+
                     paySupplierDebtMutation.mutate({
                       supplierId: supplierId.id,
                       amount:
-                        currency == "USD"
+                        currency === "USD"
                           ? amount
                           : Number((Number(amount) / exchangeRate).toFixed(1)),
                       note,
-                      currency: currency,
-                      exchangeRate: exchangeRate,
+                      currency,
+                      exchangeRate,
                       amount_base: amount,
+                      paymentAccountId,
+                      payableAccountId,
                     });
                   }}
                 >
                   <FormInput
                     label="قيمة الدفعة"
-                    id="payment-amount"
+                    id="payment-amount-in"
                     type="text"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                   />
                   <FormInput
                     label="ملاحظات"
-                    id="note"
+                    id="note-in"
                     type="text"
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
@@ -237,19 +288,35 @@ export default function SupplierDetails() {
                     </SelectContent>
                   </Select>
                   <FormInput
-                    id="exchangeRate"
+                    id="exchangeRate-in"
                     label="سعر الصرف"
-                    value={currency == "USD" ? 1 : exchangeRate}
+                    value={currency === "USD" ? 1 : exchangeRate}
                     onChange={(e) => setExchangeRate(Number(e.target.value))}
                     disabled={currency === "USD"}
                   />
-                  <Button className="w-full" type="submit">
-                    دفع للمورد
+                  <AccountSelect
+                    label="حساب الدفع"
+                    value={paymentAccountId}
+                    onChange={setPaymentAccountId}
+                    filterType="payment"
+                  />
+                  <AccountSelect
+                    label="حساب الموردين"
+                    value={payableAccountId}
+                    onChange={setPayableAccountId}
+                    filterType="payable"
+                  />
+                  <Button
+                    className="w-full"
+                    type="submit"
+                    disabled={paySupplierDebtMutation.isPending}
+                    loading={paySupplierDebtMutation.isPending}
+                  >
+                    دفعة من المورد
                   </Button>
                 </form>
               </PopupForm>
 
-              {/* دفع للمورد */}
               <PopupForm
                 title="دفع للمورد"
                 trigger={
@@ -264,29 +331,33 @@ export default function SupplierDetails() {
                   className="space-y-4 mt-4"
                   onSubmit={(e) => {
                     e.preventDefault();
+                    if (!validateSupplierPaymentAccounts()) return;
+
                     paySupplierDebtMutation.mutate({
-                      supplierId: supplierId,
+                      supplierId: supplierId.id,
                       amount:
-                        currency == "USD"
-                          ? -amount
+                        currency === "USD"
+                          ? -Number(amount)
                           : -Number((Number(amount) / exchangeRate).toFixed(1)),
                       note,
-                      currency: currency,
-                      exchangeRate: exchangeRate,
-                      amount_base: -amount,
+                      currency,
+                      exchangeRate,
+                      amount_base: -Number(amount),
+                      paymentAccountId,
+                      payableAccountId,
                     });
                   }}
                 >
                   <FormInput
                     label="قيمة الدفعة"
-                    id="payment-amount"
+                    id="payment-amount-out"
                     type="text"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                   />
                   <FormInput
                     label="ملاحظات"
-                    id="note"
+                    id="note-out"
                     type="text"
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
@@ -304,13 +375,30 @@ export default function SupplierDetails() {
                     </SelectContent>
                   </Select>
                   <FormInput
-                    id="exchangeRate"
+                    id="exchangeRate-out"
                     label="سعر الصرف"
-                    value={currency == "USD" ? 1 : exchangeRate}
+                    value={currency === "USD" ? 1 : exchangeRate}
                     onChange={(e) => setExchangeRate(Number(e.target.value))}
                     disabled={currency === "USD"}
                   />
-                  <Button className="w-full" type="submit">
+                  <AccountSelect
+                    label="حساب الدفع"
+                    value={paymentAccountId}
+                    onChange={setPaymentAccountId}
+                    filterType="payment"
+                  />
+                  <AccountSelect
+                    label="حساب الموردين"
+                    value={payableAccountId}
+                    onChange={setPayableAccountId}
+                    filterType="payable"
+                  />
+                  <Button
+                    className="w-full"
+                    type="submit"
+                    disabled={paySupplierDebtMutation.isPending}
+                    loading={paySupplierDebtMutation.isPending}
+                  >
                     دفع للمورد
                   </Button>
                 </form>
@@ -319,14 +407,12 @@ export default function SupplierDetails() {
           </CardContent>
         </Card>
 
-        {/* معاملات المورد */}
         <Card className="overflow-x-auto">
           {isLoading ? (
             <Skeleton className="h-48 w-full" />
-          ) : !data?.data?.payments?.length &&
-            !data?.data?.purchases?.length ? (
+          ) : !data?.data?.payments?.length && !data?.data?.purchases?.length ? (
             <p className="text-muted-foreground text-center">
-              لا توجد معاملات حالياً.
+              لا توجد معاملات حاليا.
             </p>
           ) : (
             <CardContent className="space-y-4 md:space-y-0 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -353,7 +439,6 @@ export default function SupplierDetails() {
                           e.preventDefault();
                           e.stopPropagation();
                           setOpenRowId(row.id.toString());
-                          console.log("row id:", openRowId);
                         }}
                       >
                         إرجاع
@@ -391,22 +476,44 @@ export default function SupplierDetails() {
                       />
 
                       <FormInput
-                        id={`return-reason`}
+                        id="return-reason"
                         label="ملاحظات"
                         type="text"
                         value={reason}
                         onChange={(e) => setReason(e.target.value)}
                       />
 
+                      <AccountSelect
+                        label="حساب المخزون"
+                        value={inventoryAccountId}
+                        onChange={setInventoryAccountId}
+                        filterType="inventory"
+                      />
+                      {(isDebt === "debt" || isDebt === "part") && (
+                        <AccountSelect
+                          label="حساب الموردين"
+                          value={payableAccountId}
+                          onChange={setPayableAccountId}
+                          filterType="payable"
+                        />
+                      )}
+                      {(isDebt === "cash" || isDebt === "part") && (
+                        <AccountSelect
+                          label="حساب الدفع"
+                          value={paymentAccountId}
+                          onChange={setPaymentAccountId}
+                          filterType="payment"
+                        />
+                      )}
+
                       <div className="flex justify-end mt-2">
                         <Button
                           type="submit"
                           className="w-full"
                           disabled={returnMutation.isPending}
+                          loading={returnMutation.isPending}
                         >
-                          {returnMutation.isPending
-                            ? "جاري التأكيد..."
-                            : "تأكيد الإرجاع"}
+                          تأكيد الإرجاع
                         </Button>
                       </div>
                     </form>

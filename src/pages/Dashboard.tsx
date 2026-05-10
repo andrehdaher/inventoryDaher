@@ -7,6 +7,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { CardHeader, Card, CardContent } from "@/components/ui/card";
 import getAllCustomer from "@/services/customer";
 import { getPaymentsByMonth } from "@/services/payments";
+import getAllProducts from "@/services/products";
 import getAllSells from "@/services/sells";
 import getAllSupplier from "@/services/supplier";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
@@ -26,7 +27,7 @@ export default function Dashboard() {
     year: string;
   }>({
     month: dayjs().format("M"),
-    year: "2026",
+    year: dayjs().format("YYYY"),
   });
 
   // ✅ Query Keys تشمل الشهر والسنة
@@ -40,6 +41,11 @@ export default function Dashboard() {
     queryFn: () => getPaymentsByMonth(balanceDate),
   });
 
+  const { data: products, isLoading: productsLoading } = useQuery({
+    queryKey: ["products-table"],
+    queryFn: getAllProducts,
+  });
+
   const { data: supplier, isLoading: supplierLoading } = useQuery({
     queryKey: ["supplier-table"],
     queryFn: getAllSupplier,
@@ -50,12 +56,17 @@ export default function Dashboard() {
     queryFn: getAllCustomer,
   });
 
-  const pieData = Object.values(sells || {}).reduce(
-    (acc: Record<string, number>, sell: any) => {
-      sell?.products?.forEach((prod: any) => {
-        if (!acc[prod.warehouse]) acc[prod.warehouse] = 0;
-        acc[prod.warehouse] += 1; // كل مرة يظهر المنتج نزيد 1
-      });
+  const pieData = Object.values(products || {}).reduce(
+    (acc: Record<string, number>, product: any) => {
+      const warehouseName = product?.warehouse;
+      const quantity = Number(product?.quantity || 0);
+
+      if (!warehouseName) {
+        return acc;
+      }
+
+      if (!acc[warehouseName]) acc[warehouseName] = 0;
+      acc[warehouseName] += quantity;
       return acc;
     },
     {},
@@ -237,6 +248,7 @@ export default function Dashboard() {
               data={pieChartData ? (pieChartData as any[]) : []}
               type="pie"
               dataKey="value"
+              desc={productsLoading ? "جاري التحميل..." : "بحسب الكميات الحالية"}
             />
           </CardContent>
         </Card>

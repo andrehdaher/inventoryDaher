@@ -27,9 +27,9 @@ const FormInput = forwardRef<HTMLInputElement, FormInputProps>(
           <Select
             value={props.value ? String(props.value) : ""}
             onValueChange={(v) => {
-              // ⚠️ نرسل value بشكل متوافق مع RHF
+              // ⚠️ نرسل value و name بشكل متوافق مع RHF
               props.onChange?.({
-                target: { value: v },
+                target: { name: props.name, value: v },
               } as any);
             }}
           >
