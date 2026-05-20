@@ -105,6 +105,7 @@ export default function Products() {
           setIsOpen={setOpenForm}
           row={editRow}
         />
+
         <TransfareForm
           isOpen={openTransfare}
           setIsOpen={setOpenTransfare}

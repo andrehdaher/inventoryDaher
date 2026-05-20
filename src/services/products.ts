@@ -62,3 +62,17 @@ export const deleteProduct = async (id: string) => {
   const res = await apiClient.delete(`/api/products/${id}`);
   return res.data;
 };
+
+export const bulkUpdateProductPrices = async (data: {
+  productIds: string[];
+  percentageIncrease: number;
+  priceType: "sellPrice" | "payPrice";
+}) => {
+  try {
+    const response = await apiClient.post("/api/products/bulk-update-prices", data);
+    return response.data;
+  } catch (err) {
+    console.error("❌ خطأ في تحديث الأسعار:", err);
+    throw new Error("خطأ أثناء تحديث الأسعار");
+  }
+};

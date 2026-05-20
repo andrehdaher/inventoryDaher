@@ -37,31 +37,79 @@ const formatDateTime = (value?: string) => {
   });
 };
 
-const extractLines = (value?: string) =>
+const normalizeText = (value?: string | null) => (value || "").trim();
+
+const stripListMarker = (value: string) =>
+  value.replace(/^\s*[-•]\s*/, "").trim();
+
+const extractLines = (value?: string | null) =>
   (value || "")
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
 
-const getSectionTitle = (section: AiReportSection, index: number) => {
-  const title = section.title?.trim();
+const areSameText = (first?: string | null, second?: string | null) =>
+  normalizeText(first).replace(/:$/, "") ===
+  normalizeText(second).replace(/:$/, "");
 
-  if (title && title.length <= 80 && !title.includes("\n")) {
+const uniqueLines = (lines: string[]) => {
+  const seen = new Set<string>();
+
+  return lines.filter((line) => {
+    const normalized = line.replace(/:$/, "");
+    if (seen.has(normalized)) return false;
+    seen.add(normalized);
+    return true;
+  });
+};
+
+const getSectionTitle = (
+  section: AiReportSection,
+  index: number,
+  reportTitle?: string,
+) => {
+  const title = normalizeText(section.title);
+
+  if (
+    title &&
+    title.length <= 80 &&
+    !title.includes("\n") &&
+    !areSameText(title, reportTitle)
+  ) {
     return title;
   }
 
+  const firstContentLine = extractLines(section.content)[0];
+  const firstItem = section.items?.find(Boolean);
+  const generatedTitle = stripListMarker(firstContentLine || firstItem || "");
+
+  if (generatedTitle) return generatedTitle.replace(/:$/, "");
+
   return `القسم ${index + 1}`;
+};
+
+const getSectionItems = (section: AiReportSection, sectionTitle: string) => {
+  const sourceItems =
+    section.items && section.items.length > 0
+      ? section.items
+      : extractLines(section.content);
+
+  return uniqueLines(
+    sourceItems.map(stripListMarker).filter((item) => item.length > 0),
+  ).filter((item) => !areSameText(item, sectionTitle));
 };
 
 export default function AiReports() {
   const { data, isLoading, error, refetch, isFetching } = useAiReport();
 
-  const report = data?.data;
+  const report = data?.data ?? null;
 
-  const summaryLines = useMemo(
-    () => extractLines(report?.summary || report?.rawText),
-    [report?.rawText, report?.summary],
-  );
+  const summaryLines = useMemo(() => {
+    const summary = normalizeText(report?.summary);
+    if (summary) return extractLines(summary);
+
+    return extractLines(report?.rawText).slice(0, 1);
+  }, [report?.rawText, report?.summary]);
 
   const sections = useMemo(
     () =>
@@ -71,6 +119,16 @@ export default function AiReports() {
           (b.order ?? Number.MAX_SAFE_INTEGER),
       ),
     [report?.sections],
+  );
+
+  const rawText = useMemo(
+    () =>
+      normalizeText(report?.rawText) ||
+      sections
+        .map((section) => normalizeText(section.content))
+        .filter(Boolean)
+        .join("\n\n"),
+    [report?.rawText, sections],
   );
 
   if (isLoading) {
@@ -123,16 +181,19 @@ export default function AiReports() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="space-y-6" dir="rtl">
         <Card>
           <CardHeader className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <BrainCircuit className="h-6 w-6 text-primary" />
-                <CardTitle>{report.title || "AI Report"}</CardTitle>
+                <CardTitle>
+                  {report.title || "تقرير الذكاء الاصطناعي"}
+                </CardTitle>
               </div>
               <CardDescription>
-                تقرير منظم يعتمد على آخر تحليل مولد من النظام.
+                {summaryLines[0] ||
+                  "تقرير منظم يعتمد على آخر تحليل مولد من النظام."}
               </CardDescription>
               <div className="flex flex-wrap gap-2">
                 <Badge variant="outline" className="gap-1">
@@ -144,7 +205,9 @@ export default function AiReports() {
                   {formatDateTime(report.updatedAt || report.createdAt)}
                 </Badge>
                 {report.entryId && (
-                  <Badge variant="secondary">Entry: {report.entryId}</Badge>
+                  <Badge variant="secondary" dir="ltr">
+                    Entry: {report.entryId}
+                  </Badge>
                 )}
               </div>
             </div>
@@ -200,47 +263,59 @@ export default function AiReports() {
             </CardHeader>
             <CardContent>
               {sections.length > 0 ? (
-                <div className="grid gap-4 md:grid-cols-2">
+                <div
+                  className={
+                    sections.length > 1
+                      ? "grid gap-4 md:grid-cols-2"
+                      : "space-y-4"
+                  }
+                >
                   {sections.map((section, index) => {
-                    const items = (section.items || []).filter(Boolean);
+                    const sectionTitle = getSectionTitle(
+                      section,
+                      index,
+                      report.title,
+                    );
+                    const items = getSectionItems(section, sectionTitle);
                     const contentLines = extractLines(section.content);
+                    const shouldShowContent =
+                      items.length === 0 && contentLines.length > 0;
 
                     return (
-                      <Card key={`${getSectionTitle(section, index)}-${index}`}>
-                        <CardHeader className="pb-4">
-                          <CardTitle className="text-lg">
-                            {getSectionTitle(section, index)}
-                          </CardTitle>
-                          <CardDescription>
-                            {items.length} عناصر مستخرجة
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                          {items.length > 0 && (
-                            <ul className="space-y-2 text-sm leading-6">
-                              {items.map((item, itemIndex) => (
-                                <li
-                                  key={`${item}-${itemIndex}`}
-                                  className="rounded-md border bg-muted/20 px-3 py-2"
-                                >
-                                  {item}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
+                      <div
+                        key={`${sectionTitle}-${index}`}
+                        className="rounded-md border bg-muted/10 p-4"
+                      >
+                        <div className="mb-4 space-y-1">
+                          <h3 className="text-base font-semibold leading-7">
+                            {sectionTitle}
+                          </h3>
+                          <p className="text-xs text-muted-foreground">
+                            {items.length > 0
+                              ? `${items.length} عناصر مستخرجة`
+                              : "نص القسم متاح بدون بنود منفصلة"}
+                          </p>
+                        </div>
 
-                          {contentLines.length > 0 && (
-                            <div className="space-y-2">
-                              <p className="text-xs font-medium text-muted-foreground">
-                                النص الكامل للقسم
-                              </p>
-                              <div className="whitespace-pre-wrap rounded-md border bg-background px-3 py-3 text-sm leading-7">
-                                {contentLines.join("\n")}
-                              </div>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
+                        {items.length > 0 && (
+                          <ul className="space-y-2 text-sm leading-7">
+                            {items.map((item, itemIndex) => (
+                              <li
+                                key={`${item}-${itemIndex}`}
+                                className="rounded-md border bg-background px-3 py-2"
+                              >
+                                {item}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+
+                        {shouldShowContent && (
+                          <div className="whitespace-pre-wrap rounded-md border bg-background px-3 py-3 text-sm leading-7">
+                            {contentLines.join("\n")}
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
@@ -266,7 +341,7 @@ export default function AiReports() {
           <CardContent>
             <div className="max-h-[420px] overflow-auto rounded-md border bg-muted/20 p-4">
               <pre className="whitespace-pre-wrap break-words text-sm leading-7">
-                {report.rawText || "لا يوجد نص خام متاح."}
+                {rawText || "لا يوجد نص خام متاح."}
               </pre>
             </div>
           </CardContent>

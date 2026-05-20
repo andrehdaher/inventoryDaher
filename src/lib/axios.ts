@@ -9,15 +9,15 @@ const getBaseURL = () => {
     //const inventoryUser = storedUser ? JSON.parse(storedUser) : null;
 
     return (
-      // "https://serverinventorydaherserver.onrender.com"
+      // "http://localhost:5000"
       // inventoryUser?.serverURL ||
       // import.meta.env.VITE_API_BASE_URL ||
-      "https://serverinventorydaherserver.onrender.com"
+      "http://localhost:5000"
     );
   } catch (error) {
     console.error("Failed to parse InventoryUser:", error);
     return (
-      import.meta.env.VITE_API_BASE_URL || "https://serverinventorydaherserver.onrender.com"
+      import.meta.env.VITE_API_BASE_URL || "http://localhost:5000"
     );
   }
 };

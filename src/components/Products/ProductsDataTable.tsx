@@ -1,8 +1,10 @@
 import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { DataTable } from "../dashboard/DataTable";
 import { Button } from "../ui/button";
 import { Product } from "@/services/transaction";
 import { ProductTableRow } from "@/pages/Products";
+import BulkPriceIncreaseForm from "./BulkPriceIncreaseForm";
 
 type productDataTableProp = {
   productsData: Product[] | ProductTableRow[];
@@ -15,6 +17,7 @@ type productDataTableProp = {
 
 const ProductsDataTable = ({ productsData, setEditRow, setOpenForm, setOpenTransfare, setProductRow, isLoading }: productDataTableProp) => {
   const navigate = useNavigate();
+  const [openBulkPriceIncrease, setOpenBulkPriceIncrease] = useState(false);
   const ProductsColumns = [
     { key: "id", label: "المعرف", sortable: true, hidden: true },
     { key: "code", label: "الرمز", sortable: true },
@@ -33,6 +36,7 @@ const ProductsDataTable = ({ productsData, setEditRow, setOpenForm, setOpenTrans
         isLoading={isLoading}
         title="قائمة المنتجات"
         titleButton={
+          <div className="flex flex-row gap-2">
           <Button
             onClick={() => {
               setEditRow(null);
@@ -42,6 +46,19 @@ const ProductsDataTable = ({ productsData, setEditRow, setOpenForm, setOpenTrans
           >
             إضافة منتج
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => setOpenBulkPriceIncrease(true)}
+           >
+            زيادة الاسعار بنسبة محددة
+          </Button>
+          <BulkPriceIncreaseForm
+            isOpen={openBulkPriceIncrease}
+            setIsOpen={setOpenBulkPriceIncrease}
+            productsData={productsData}
+          />
+          </div>
+          
         }
         columns={ProductsColumns}
         data={productsData}
