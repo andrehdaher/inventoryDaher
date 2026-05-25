@@ -6,6 +6,7 @@ import path from "path";
 const Products = React.lazy(() => import("@/pages/Products"));
 const Dashboard = React.lazy(() => import("@/pages/Dashboard"));
 const SellProduct = React.lazy(() => import("@/pages/SellProduct"));
+const Home = React.lazy(() => import("@/pages/Home"));
 const NotFound = React.lazy(() => import("@/pages/NotFound"));
 const Login = React.lazy(() => import("@/pages/Login"));
 const SignUp = React.lazy(() => import("@/pages/SignUp"));
@@ -38,6 +39,7 @@ import AiReports from "@/pages/AiReports";
 export const routesConfig = [
   { path: "/", element: <Login /> },
   { path: "/login", element: <Login /> },
+  { path: "/home", element: <Home /> },
   { path: "/signUp", element: <SignUp /> },
   { path: "/unauthorized", element: <UnauthorizedPage /> },
   { path: "/Products", element: <Products />},

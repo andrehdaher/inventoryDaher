@@ -30,8 +30,8 @@ export default function Login() {
 
       if (res?.message?.includes("بنجاح")) {
         localStorage.setItem("InventoryUser", JSON.stringify(res.user));
+        navigate("/home");
         toast.success("تم تسجيل الدخول بنجاح");
-        navigate("/dashboard");
       } else {
         toast.error(res?.error || "فشل تسجيل الدخول");
       }

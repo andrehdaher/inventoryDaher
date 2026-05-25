@@ -8,7 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useAiReport } from "@/hooks/useAi";
+import { useAiRefresh, useAiReport } from "@/hooks/useAi";
 import type { AiReportSection } from "@/services/ai";
 import {
   BrainCircuit,
@@ -101,6 +101,7 @@ const getSectionItems = (section: AiReportSection, sectionTitle: string) => {
 
 export default function AiReports() {
   const { data, isLoading, error, refetch, isFetching } = useAiReport();
+  const { mutate: refreshReport, isPending: isRefreshing } = useAiRefresh();
 
   const report = data?.data ?? null;
 
@@ -150,7 +151,7 @@ export default function AiReports() {
             <CardDescription>{error.message}</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button variant="outline" onClick={() => refetch()}>
+            <Button variant="outline" onClick={() => refreshReport()}>
               إعادة المحاولة
             </Button>
           </CardContent>
@@ -170,7 +171,7 @@ export default function AiReports() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button variant="outline" onClick={() => refetch()}>
+            <Button variant="outline" onClick={() => refreshReport()}>
               تحديث التقرير
             </Button>
           </CardContent>
@@ -214,12 +215,12 @@ export default function AiReports() {
 
             <Button
               variant="outline"
-              onClick={() => refetch()}
-              disabled={isFetching}
+              onClick={() => refreshReport()}
+              disabled={isFetching || isRefreshing}
               className="gap-2"
             >
               <RefreshCw
-                className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`}
+                className={`h-4 w-4 ${isFetching || isRefreshing ? "animate-spin" : ""}`}
               />
               تحديث التقرير
             </Button>

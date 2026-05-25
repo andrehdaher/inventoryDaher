@@ -18,13 +18,18 @@ import {
   Scale,
   TrendingUp,
   ClipboardList,
-  Truck,
-  
+  LayoutDashboard   
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
 const navigationGroups = [
+  {
+    name: "Home",
+    href: "/home",
+    icon: Home,
+    allowed: ["admin", "user"],
+  },
   {
     name: "All Products",
     href: "/Products",
@@ -121,12 +126,12 @@ const navigationGroups = [
   icon: BrainCircuit,
   allowed: ["admin"],
 },
-{
-  name: "Ask AI",
-  href: "/ai-chat",
-  icon: BrainCircuit,
-  allowed: ["admin"],
-}
+// {
+//   name: "Ask AI",
+//   href: "/ai-chat",
+//   icon: BrainCircuit,
+//   allowed: ["admin"],
+// }
   // {
   //   name: "Exchange",
   //   href: "/Exchange",
@@ -189,7 +194,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                 : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
             )}
           >
-            <Home className="h-5 w-5 flex-shrink-0 mr-3" />
+            <LayoutDashboard className="h-5 w-5 flex-shrink-0 mr-3" />
             {!isCollapsed && "Dashboard"}
           </Link>
         </nav>

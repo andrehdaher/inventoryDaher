@@ -1,8 +1,8 @@
 import { useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery , useMutation } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import { queryKeys } from "@/lib/queryKeys";
-import getAiReport, { AiReportResponse } from "@/services/ai";
+import getAiReport, { AiReportResponse, refreshAiReport } from "@/services/ai";
 
 export const useAiReport = () => {
   const query = useQuery<AiReportResponse, Error>({
@@ -22,3 +22,13 @@ export const useAiReport = () => {
 
   return query;
 };
+
+
+export const useAiRefresh = () => {
+  const mutation = useMutation<AiReportResponse, Error>({
+    mutationFn: refreshAiReport,
+  });
+
+  return mutation;
+  
+}

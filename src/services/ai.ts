@@ -1,4 +1,5 @@
 import apiClient from "@/lib/axios";
+import axios from "axios";
 
 export interface AiReportSection {
   title?: string;
@@ -66,3 +67,23 @@ export default async function getAiReport(): Promise<AiReportResponse> {
     throw new Error("خطأ أثناء جلب التقرير");
   }
 }
+
+export async function refreshAiReport(): Promise<AiReportResponse> {
+  try {
+    // إرسال الطلب إلى webhook الـ n8n
+const n8nWebhookUrl = "https://andrehdaher.app.n8n.cloud/webhook-test/refresh-ai";
+    const res = await axios.post<AiReportApiResponse>(n8nWebhookUrl);
+    console.log("Response from AI report refresh via N8N webhook:", res.data);
+    const report = normalizeAiReport(res.data);
+
+    return {
+      data: report,
+      entryId: report?.entryId ?? null,
+      updatedAt: report?.updatedAt,
+    };
+  } catch (err) {
+    console.error("خطأ في تحديث التقرير عبر N8N:", err);
+    throw new Error("خطأ أثناء تحديث التقرير");
+  }
+}
+
