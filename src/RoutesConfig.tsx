@@ -31,7 +31,7 @@ const GeneralLedger = React.lazy(()=> import('@/pages/GeneralLedger'))
 const IncomeStatement = React.lazy(()=> import('@/pages/IncomeStatement'))
 const ProfitAnalysis = React.lazy(()=> import('@/pages/ProfitAnalysis'))
 const InventoryBalances = React.lazy(()=> import('@/pages/InventoryBalances'))
-// const Purchases =React.lazy(()=> import('@/pages/Purchases'))
+const Purchases =React.lazy(()=> import('@/pages/Purchases'))
 //   const AskAi = React.lazy(() => import('@/pages/AskAi'))
 // import AiReports from "@/pages/AiReports";
 
@@ -68,6 +68,6 @@ export const routesConfig = [
   { path: "/inventory-balances", element: <InventoryBalances /> },
   // { path: "/ai-reports", element: <AiReports /> },
   // { path: "/ai-chat", element: <AskAi /> },
-  // {path: '/purchases' , element:<Purchases/>},
+  {path: '/purchases' , element:<Purchases/>},
   { path: "*", element: <NotFound /> }
 ];

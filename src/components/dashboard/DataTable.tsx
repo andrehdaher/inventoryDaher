@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { inventoryUser } from "../layout/Header";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 interface TableColumn {
   key: string;
@@ -175,22 +176,24 @@ export function DataTable({
   const SKELETON_ROWS = Array.from({ length: pageSize });
 
   return (
-    <Card className={className}>
-      <CardHeader>
+    <Card className={cn("w-full overflow-hidden", className)}>
+      <CardHeader className="p-4 sm:p-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex flex-col md:flex-row md:items-center gap-2">
-            <div>
-              <CardTitle>{title}</CardTitle>
+          <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center">
+            <div className="min-w-0">
+              <CardTitle className="text-lg sm:text-2xl">{title}</CardTitle>
               {description && (
-                <CardDescription className="mt-2">
+                <CardDescription className="mt-2 break-words">
                   {description}
                 </CardDescription>
               )}
             </div>
-            {titleButton && <>{titleButton}</>}
+            {titleButton && (
+              <div className="w-full shrink-0 md:w-auto">{titleButton}</div>
+            )}
           </div>
           {searchable && (
-            <div className="flex w-full max-w-sm items-center space-x-2">
+            <div className="flex w-full items-center md:max-w-sm">
               <div className="relative w-full">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -207,9 +210,9 @@ export function DataTable({
           )}
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="overflow-x-auto rounded-md border">
-          <Table className="text-center">
+      <CardContent className="space-y-4 p-4 pt-0 sm:p-6 sm:pt-0">
+        <div className="w-full overflow-x-auto rounded-md border">
+          <Table className="min-w-[720px] text-center">
             <TableHeader>
               <TableRow>
                 {columns.map((column) => (
@@ -218,7 +221,7 @@ export function DataTable({
                       column.hidden ||
                       (column.onlyAdmin && inventoryUser?.role !== "admin")
                         ? "hidden"
-                        : "text-center"
+                        : "whitespace-nowrap text-center"
                     }
                     key={column.key}
                   >
@@ -229,7 +232,7 @@ export function DataTable({
                           handleSort(column.key);
                           console.log(column.hidden);
                         }}
-                        className={`h-auto p-0 font-medium`}
+                        className="h-auto whitespace-nowrap p-0 font-medium"
                       >
                         {column.label}
                         {sortConfig?.key === column.key && (
@@ -239,11 +242,15 @@ export function DataTable({
                         )}
                       </Button>
                     ) : (
-                      column.label
+                      <span className="whitespace-nowrap">{column.label}</span>
                     )}
                   </TableHead>
                 ))}
-                {renderRowActions && <TableHead>Actions</TableHead>}
+                {renderRowActions && (
+                  <TableHead className="whitespace-nowrap text-center">
+                    Actions
+                  </TableHead>
+                )}
               </TableRow>
             </TableHeader>
 
@@ -258,7 +265,7 @@ export function DataTable({
                           column.hidden ||
                           (column.onlyAdmin && inventoryUser?.role !== "admin")
                             ? "hidden"
-                            : ""
+                            : "max-w-48 whitespace-nowrap"
                         }
                       >
                         <Skeleton className="h-4 w-full rounded-md" />
@@ -284,15 +291,22 @@ export function DataTable({
                           column.hidden ||
                           (column.onlyAdmin && inventoryUser?.role !== "admin")
                             ? "hidden"
-                            : ""
+                            : "max-w-48 truncate whitespace-nowrap"
                         }
                         key={column.key}
+                        title={
+                          row[column.key] == null
+                            ? undefined
+                            : String(row[column.key])
+                        }
                       >
                         {renderCellContent(row[column.key], column.key)}
                       </TableCell>
                     ))}
                     {renderRowActions && (
-                      <TableCell>{renderRowActions(row)}</TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {renderRowActions(row)}
+                      </TableCell>
                     )}
                   </TableRow>
                 ))
@@ -311,11 +325,11 @@ export function DataTable({
         </div>
         
 
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center space-x-2">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center justify-between gap-2 md:justify-start">
             <span className="text-sm text-muted-foreground">عدد الاسطر :</span>
             <select
-              className="border rounded px-2 py-1 text-sm bg-background"
+              className="h-9 rounded border bg-background px-2 py-1 text-sm"
               value={pageSize}
               onChange={(e) => {
                 setPageSize(Number(e.target.value));
@@ -329,21 +343,23 @@ export function DataTable({
               ))}
             </select>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center justify-between gap-2 md:justify-end">
             <Button
               variant="outline"
               size="sm"
+              className="h-9 min-w-10"
               onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
               disabled={currentPage === 1}
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
-            <span className="text-sm">
+            <span className="min-w-28 text-center text-sm">
               Page {currentPage} of {totalPages || 1}
             </span>
             <Button
               variant="outline"
               size="sm"
+              className="h-9 min-w-10"
               onClick={() =>
                 setCurrentPage((prev) => Math.min(prev + 1, totalPages))
               }

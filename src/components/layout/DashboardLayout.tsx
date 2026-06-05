@@ -3,6 +3,7 @@ import { Header } from "./Header";
 import { Sidebar } from "./Sidebar";
 import { cn } from "@/lib/utils";
 import ScreenWrapper from "../ui/ScreenWrapper";
+import { Sheet, SheetContent } from "../ui/sheet";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -10,6 +11,7 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   const toggleSidebar = () => {
     setSidebarCollapsed(!sidebarCollapsed);
@@ -18,16 +20,33 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
     <ScreenWrapper>
       <div className="flex h-screen overflow-hidden text-foreground">
-        <Sidebar isCollapsed={sidebarCollapsed} onToggle={toggleSidebar} />
+        <Sidebar
+          isCollapsed={sidebarCollapsed}
+          onToggle={toggleSidebar}
+          className="hidden md:flex"
+        />
+        <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
+          <SheetContent
+            side="right"
+            className="w-[84vw] max-w-80 p-0 sm:max-w-80"
+          >
+            <Sidebar
+              isCollapsed={false}
+              onToggle={() => setMobileSidebarOpen(false)}
+              isMobile
+              onNavigate={() => setMobileSidebarOpen(false)}
+            />
+          </SheetContent>
+        </Sheet>
         <div className="flex flex-1 flex-col overflow-hidden">
-          <Header onToggleSidebar={toggleSidebar} />
+          <Header onToggleSidebar={() => setMobileSidebarOpen(true)} />
           <main
             className={cn(
-              "flex-1 overflow-auto p-4 md:p-6 lg:p-8",
+              "flex-1 overflow-auto p-3 sm:p-4 md:p-6 lg:p-8",
               "transition-all duration-300",
             )}
           >
-            <div dir="rtl" className="mx-auto max-w-7xl space-y-6">{children}</div>
+            <div dir="rtl" className="mx-auto w-full max-w-7xl space-y-4 md:space-y-6">{children}</div>
           </main>
         </div>
       </div>

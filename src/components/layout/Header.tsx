@@ -1,4 +1,4 @@
-import { Bell, User } from "lucide-react";
+import { Bell, Menu, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -19,7 +19,11 @@ export interface inventoryUser {
   username: string,
 }
 
-export function Header() {
+interface HeaderProps {
+  onToggleSidebar: () => void;
+}
+
+export function Header({ onToggleSidebar }: HeaderProps) {
   const navigate = useNavigate()
   const [inventoryUser, setInventoryUser] = useState<inventoryUser>()
 
@@ -30,23 +34,32 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-16 items-center px-4">
-        <div className="mr-4 md:flex">
-          <div className="mr-6 flex items-center space-x-2">
-            <h1 className="text-xl font-extrabold flex items-center gap-2">
-              <span className="bg-gradient-to-r from-primary-600 to-accent-600 bg-clip-text text-transparent">
+      <div className="flex h-14 items-center gap-2 px-3 sm:h-16 sm:px-4">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 shrink-0 md:hidden"
+          onClick={onToggleSidebar}
+        >
+          <Menu className="h-5 w-5" />
+          <span className="sr-only">Open navigation</span>
+        </Button>
+
+        <div className="min-w-0 flex-1 md:mr-4 md:flex">
+          <div className="flex min-w-0 items-center">
+            <h1 className="flex min-w-0 items-center gap-1.5 text-base font-extrabold sm:text-xl">
+              <span className="shrink-0 bg-gradient-to-r from-primary-600 to-accent-600 bg-clip-text text-transparent">
                 Daher-Net
               </span>
-              <span className="text-gray-700 dark:text-gray-300 font-semibold">
+              <span className="truncate text-sm font-semibold text-gray-700 dark:text-gray-300 sm:text-base">
                 / {inventoryUser?.username}
               </span>
             </h1>
           </div>
         </div>
 
-        <div className="flex flex-1 items-center justify-between space-x-2 md:justify-end">
-          <div className="w-full flex-1 md:w-auto md:flex-none"></div>
-          <nav className="flex items-center space-x-2">
+        <div className="flex shrink-0 items-center justify-end">
+          <nav className="flex items-center gap-1 sm:gap-2">
             <Button variant="ghost" size="icon" className="h-9 w-9">
               <Bell className="h-4 w-4" />
               <span className="sr-only">Notifications</span>

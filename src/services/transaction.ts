@@ -108,6 +108,23 @@ export async function payNewProduct({
   }
 }
 
+export async function purchaseInvoice({ newPurchase }: { newPurchase: any }) {
+  try {
+    const response = await apiClient.post("/api/transactions/purchase-invoice", {
+      newPurchase,
+    });
+    return response.data;
+  } catch (err: any) {
+    console.error("Purchase invoice error:", err);
+
+    if (err.response && err.response.data?.message) {
+      throw new Error(err.response.data.message);
+    }
+
+    throw new Error("Failed to connect to server");
+  }
+}
+
 export async function sellProducts({ newSell }: { newSell: sell }) {
   try {
     const response = await apiClient.post("/api/transactions/sell", {

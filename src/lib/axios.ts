@@ -9,7 +9,7 @@ const getBaseURL = () => {
     //const inventoryUser = storedUser ? JSON.parse(storedUser) : null;
 
     return (
-      // "http://localhost:5000"
+      // "https://serverinventorydaherserver.onrender.com"
       // inventoryUser?.serverURL ||
       // import.meta.env.VITE_API_BASE_URL ||
       "https://serverinventorydaherserver.onrender.com"

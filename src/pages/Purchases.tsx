@@ -1,12 +1,546 @@
-// import ReturnComponent from "@/components/purchases/return";
-// import SellComponent from "@/components/purchases/sell";
-// import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import AccountSelect from "@/components/Accounts/AccountSelect";
+import SupplierSelect from "@/components/Products/SupplierSelect";
+import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { queryKeys } from "@/lib/queryKeys";
+import getAllProducts from "@/services/products";
+import { Product, purchaseInvoice } from "@/services/transaction";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { PackagePlus, Search, Trash2 } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { toast } from "sonner";
 
-// export default function Purchases() {
-//   return (
-//     <DashboardLayout>
-//       <ReturnComponent />
-//       <SellComponent />
-//     </DashboardLayout>
-//   );
-// }
+type SelectedPurchaseProduct = Product & {
+  qty: number;
+  purchasePayPrice: number;
+  purchaseSellPrice: number;
+};
+
+const toNumber = (value: unknown) => {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : 0;
+};
+
+function FieldBlock({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label className="block text-sm font-medium leading-none">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+export default function Purchases() {
+  const [supplierModalOpen, setSupplierModalOpen] = React.useState(false);
+  const [supplierId, setSupplierId] = useState<string | number | null>(null);
+  const [search, setSearch] = useState("");
+  const [selectedProducts, setSelectedProducts] = useState<
+    SelectedPurchaseProduct[]
+  >([]);
+  const [paymentStatus, setPaymentStatus] = useState<"cash" | "part" | "debt">(
+    "cash",
+  );
+  const [partValue, setPartValue] = useState("");
+  const [currency, setCurrency] = useState("USD");
+  const [exchangeRate, setExchangeRate] = useState(1);
+  const [inventoryAccountId, setInventoryAccountId] = useState("");
+  const [payableAccountId, setPayableAccountId] = useState("");
+  const [paymentAccountId, setPaymentAccountId] = useState("");
+
+  const queryClient = useQueryClient();
+
+  const { data: products = [] } = useQuery({
+    queryKey: queryKeys.products,
+    queryFn: getAllProducts,
+  });
+
+  const filteredProducts = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return [];
+
+    return products
+      .filter((product: Product) => {
+        return (
+          product.name?.toLowerCase().includes(term) ||
+          product.code?.toLowerCase().includes(term)
+        );
+      })
+      .slice(0, 20);
+  }, [products, search]);
+
+  const totalPrice = useMemo(
+    () =>
+      selectedProducts.reduce(
+        (sum, product) =>
+          sum + toNumber(product.purchasePayPrice) * toNumber(product.qty),
+        0,
+      ),
+    [selectedProducts],
+  );
+
+  const mutation = useMutation({
+    mutationFn: purchaseInvoice,
+    onSuccess: () => {
+      toast.success("تم تثبيت فاتورة الشراء بنجاح");
+      setSupplierId(null);
+      setSearch("");
+      setSelectedProducts([]);
+      setPaymentStatus("cash");
+      setPartValue("");
+      setCurrency("USD");
+      setExchangeRate(1);
+      setInventoryAccountId("");
+      setPayableAccountId("");
+      setPaymentAccountId("");
+      queryClient.invalidateQueries({ queryKey: queryKeys.products });
+      queryClient.invalidateQueries({ queryKey: queryKeys.journalEntries });
+      queryClient.invalidateQueries({ queryKey: ["payments-table"] });
+      queryClient.invalidateQueries({ queryKey: ["suppliers-table"] });
+      queryClient.invalidateQueries({ queryKey: ["supplier-details"] });
+    },
+    onError: (error: any) => {
+      toast.error(error?.message || "تعذر تثبيت فاتورة الشراء");
+    },
+  });
+
+  const addProduct = (product: Product) => {
+    setSelectedProducts((current) => {
+      const existing = current.find((item) => item.id === product.id);
+
+      if (existing) {
+        return current.map((item) =>
+          item.id === product.id ? { ...item, qty: item.qty + 1 } : item,
+        );
+      }
+
+      return [
+        ...current,
+        {
+          ...product,
+          qty: 1,
+          purchasePayPrice: toNumber(product.payPrice),
+          purchaseSellPrice: toNumber(product.sellPrice),
+        },
+      ];
+    });
+    setSearch("");
+  };
+
+  const updateSelectedProduct = (
+    id: string,
+    key: "qty" | "purchasePayPrice" | "purchaseSellPrice",
+    value: number,
+  ) => {
+    setSelectedProducts((current) =>
+      current.map((product) =>
+        product.id === id ? { ...product, [key]: value } : product,
+      ),
+    );
+  };
+
+  const removeProduct = (id: string) => {
+    setSelectedProducts((current) =>
+      current.filter((product) => product.id !== id),
+    );
+  };
+
+  const validateForm = () => {
+    if (!supplierId) {
+      toast.error("الرجاء اختيار المورد");
+      return false;
+    }
+
+    if (!selectedProducts.length) {
+      toast.error("الرجاء إضافة منتج واحد على الأقل");
+      return false;
+    }
+
+    if (selectedProducts.some((product) => toNumber(product.qty) <= 0)) {
+      toast.error("كل الكميات يجب أن تكون أكبر من صفر");
+      return false;
+    }
+
+    if (
+      selectedProducts.some((product) => toNumber(product.purchasePayPrice) <= 0)
+    ) {
+      toast.error("كل أسعار الشراء يجب أن تكون أكبر من صفر");
+      return false;
+    }
+
+    if (!inventoryAccountId) {
+      toast.error("الرجاء اختيار حساب المخزون");
+      return false;
+    }
+
+    if (!payableAccountId) {
+      toast.error("الرجاء اختيار حساب الموردين");
+      return false;
+    }
+
+    if (paymentStatus !== "debt" && !paymentAccountId) {
+      toast.error("الرجاء اختيار حساب الدفع");
+      return false;
+    }
+
+    if (paymentStatus !== "debt" && !currency) {
+      toast.error("الرجاء اختيار العملة");
+      return false;
+    }
+
+    if (currency === "SYP" && toNumber(exchangeRate) <= 0) {
+      toast.error("الرجاء إدخال سعر صرف صحيح");
+      return false;
+    }
+
+    if (paymentStatus === "part" && toNumber(partValue) <= 0) {
+      toast.error("الرجاء إدخال قيمة الدفعة");
+      return false;
+    }
+
+    const paidAmount =
+      paymentStatus === "part"
+        ? currency === "USD"
+          ? toNumber(partValue)
+          : toNumber(partValue) / toNumber(exchangeRate)
+        : totalPrice;
+
+    if (paymentStatus === "part" && paidAmount >= totalPrice) {
+      toast.error("الدفعة الجزئية يجب أن تكون أقل من إجمالي الفاتورة");
+      return false;
+    }
+
+    return true;
+  };
+
+  const submitInvoice = () => {
+    if (!validateForm()) return;
+
+    const paidAmount =
+      paymentStatus === "cash"
+        ? totalPrice
+        : paymentStatus === "part"
+          ? currency === "USD"
+            ? toNumber(partValue)
+            : Number((toNumber(partValue) / toNumber(exchangeRate)).toFixed(3))
+          : 0;
+
+    mutation.mutate({
+      newPurchase: {
+        supplierId,
+        name: "فاتورة شراء متعددة",
+        code: `PINV-${Date.now()}`,
+        warehouse: Array.from(
+          new Set(selectedProducts.map((product) => product.warehouse)),
+        ).join(", "),
+        quantity: selectedProducts.reduce(
+          (sum, product) => sum + toNumber(product.qty),
+          0,
+        ),
+        payPrice: 0,
+        totalPrice,
+        paymentStatus,
+        remainingDebt: totalPrice - paidAmount,
+        currency,
+        exchangeRate: toNumber(exchangeRate) || 1,
+        amount_base: totalPrice * (toNumber(exchangeRate) || 1),
+        inventoryAccountId,
+        payableAccountId,
+        paymentAccountId:
+          paymentStatus === "debt" ? undefined : paymentAccountId,
+        products: selectedProducts.map((product) => ({
+          id: product.id,
+          name: product.name,
+          code: product.code,
+          category: product.category,
+          warehouse: product.warehouse,
+          quantity: toNumber(product.qty),
+          payPrice: toNumber(product.purchasePayPrice),
+          sellPrice: toNumber(product.purchaseSellPrice),
+          unit: product.unit,
+          lineTotal: toNumber(product.qty) * toNumber(product.purchasePayPrice),
+        })),
+      },
+    });
+  };
+
+  return (
+    <DashboardLayout>
+      <div className="space-y-4" dir="rtl">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-xl">
+              <PackagePlus className="h-5 w-5" />
+              فاتورة شراء متعددة المنتجات
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-3">
+              <FieldBlock label="المورد">
+                <SupplierSelect
+                  isOpen={supplierModalOpen}
+                  setIsOpen={setSupplierModalOpen}
+                  supplierId={supplierId}
+                  setSupplierId={setSupplierId}
+                  className="h-10"
+                  withDataTable
+                />
+              </FieldBlock>
+
+              <AccountSelect
+                label="حساب المخزون"
+                value={inventoryAccountId}
+                onChange={setInventoryAccountId}
+                filterType="inventory"
+              />
+
+              <AccountSelect
+                label="حساب الموردين"
+                value={payableAccountId}
+                onChange={setPayableAccountId}
+                filterType="payable"
+              />
+            </div>
+
+            <div className="relative space-y-1.5">
+              <label className="block text-sm font-medium leading-none">
+                المنتجات
+              </label>
+              <Search className="pointer-events-none absolute right-3 top-8 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="ابحث عن المنتج بالاسم أو الكود"
+                className="h-10 pr-9"
+              />
+
+              {filteredProducts.length > 0 && (
+                <div className="absolute z-20 mt-2 max-h-72 w-full overflow-auto rounded-md border bg-background shadow-lg">
+                  {filteredProducts.map((product: Product) => (
+                    <button
+                      key={product.id}
+                      type="button"
+                      className="flex w-full items-center justify-between gap-3 border-b px-3 py-2 text-right text-sm last:border-b-0 hover:bg-accent"
+                      onClick={() => addProduct(product)}
+                    >
+                      <span>
+                        {product.name} ({product.code})
+                      </span>
+                      <span className="text-muted-foreground">
+                        {product.warehouse} | {product.quantity}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="overflow-x-auto rounded-md border">
+              <table className="w-full min-w-[860px] border-collapse text-sm">
+                <thead className="bg-muted">
+                  <tr>
+                    <th className="p-2 text-right">المنتج</th>
+                    <th className="p-2 text-right">الكود</th>
+                    <th className="p-2 text-right">المستودع</th>
+                    <th className="p-2 text-right">الكمية</th>
+                    <th className="p-2 text-right">سعر الشراء</th>
+                    <th className="p-2 text-right">سعر البيع</th>
+                    <th className="p-2 text-right">المجموع</th>
+                    <th className="p-2 text-center">حذف</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedProducts.length === 0 ? (
+                    <tr>
+                      <td
+                        className="p-6 text-center text-muted-foreground"
+                        colSpan={8}
+                      >
+                        لم تتم إضافة منتجات بعد
+                      </td>
+                    </tr>
+                  ) : (
+                    selectedProducts.map((product) => (
+                      <tr key={product.id} className="border-t">
+                        <td className="p-2">{product.name}</td>
+                        <td className="p-2">{product.code}</td>
+                        <td className="p-2">{product.warehouse}</td>
+                        <td className="p-2">
+                          <Input
+                            type="number"
+                            min={1}
+                            value={product.qty}
+                            onChange={(event) =>
+                              updateSelectedProduct(
+                                product.id,
+                                "qty",
+                                toNumber(event.target.value),
+                              )
+                            }
+                            className="w-24"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <Input
+                            type="number"
+                            min={0}
+                            value={product.purchasePayPrice}
+                            onChange={(event) =>
+                              updateSelectedProduct(
+                                product.id,
+                                "purchasePayPrice",
+                                toNumber(event.target.value),
+                              )
+                            }
+                            className="w-28"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <Input
+                            type="number"
+                            min={0}
+                            value={product.purchaseSellPrice}
+                            onChange={(event) =>
+                              updateSelectedProduct(
+                                product.id,
+                                "purchaseSellPrice",
+                                toNumber(event.target.value),
+                              )
+                            }
+                            className="w-28"
+                          />
+                        </td>
+                        <td className="p-2 font-medium">
+                          {(
+                            toNumber(product.qty) *
+                            toNumber(product.purchasePayPrice)
+                          ).toFixed(2)}
+                        </td>
+                        <td className="p-2 text-center">
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="destructive"
+                            onClick={() => removeProduct(product.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <Button
+                type="button"
+                className="h-10"
+                variant={paymentStatus === "cash" ? "default" : "outline"}
+                onClick={() => setPaymentStatus("cash")}
+              >
+                نقدا
+              </Button>
+              <Button
+                type="button"
+                className="h-10"
+                variant={paymentStatus === "part" ? "default" : "outline"}
+                onClick={() => setPaymentStatus("part")}
+              >
+                جزئي
+              </Button>
+              <Button
+                type="button"
+                className="h-10"
+                variant={paymentStatus === "debt" ? "default" : "outline"}
+                onClick={() => setPaymentStatus("debt")}
+              >
+                دين
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-4">
+              {paymentStatus !== "debt" && (
+                <>
+                  <FieldBlock label="العملة">
+                    <Select value={currency} onValueChange={setCurrency}>
+                      <SelectTrigger className="h-10">
+                        <SelectValue placeholder="العملة" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="USD">USD</SelectItem>
+                        <SelectItem value="SYP">SYP</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FieldBlock>
+
+                  <FieldBlock label="سعر الصرف">
+                    <Input
+                      type="number"
+                      value={currency === "USD" ? 1 : exchangeRate}
+                      disabled={currency === "USD"}
+                      onChange={(event) =>
+                        setExchangeRate(toNumber(event.target.value))
+                      }
+                      placeholder="سعر الصرف"
+                      className="h-10"
+                    />
+                  </FieldBlock>
+
+                  <AccountSelect
+                    label="حساب الدفع"
+                    value={paymentAccountId}
+                    onChange={setPaymentAccountId}
+                    filterType="payment"
+                  />
+                </>
+              )}
+
+              {paymentStatus === "part" && (
+                <FieldBlock label="قيمة الدفعة">
+                  <Input
+                    type="number"
+                    value={partValue}
+                    onChange={(event) => setPartValue(event.target.value)}
+                    placeholder="قيمة الدفعة"
+                    className="h-10"
+                  />
+                </FieldBlock>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-3 border-t pt-4 md:flex-row md:items-center md:justify-between">
+              <div className="text-lg font-bold">
+                إجمالي الفاتورة: {totalPrice.toFixed(2)}
+              </div>
+              <Button
+                type="button"
+                variant="accent"
+                disabled={mutation.isPending}
+                loading={mutation.isPending}
+                onClick={submitInvoice}
+              >
+                تثبيت فاتورة الشراء
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </DashboardLayout>
+  );
+}
