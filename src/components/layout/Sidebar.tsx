@@ -120,12 +120,12 @@ const navigationGroups = [
   icon: TrendingUp,
   allowed: ["admin"],
 },
-{
-  name: "AI Reports",
-  href: "/ai-reports",
-  icon: BrainCircuit,
-  allowed: ["admin"],
-},
+// {
+//   name: "AI Reports",
+//   href: "/ai-reports",
+//   icon: BrainCircuit,
+//   allowed: ["admin"],
+// },
 // {
 //   name: "Ask AI",
 //   href: "/ai-chat",
