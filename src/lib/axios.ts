@@ -3,15 +3,15 @@ import axios from "axios";
 /**
  * جلب رابط السيرفر من localStorage أو env
  */
-const getBaseURL = () => {
+export const getBaseURL = () => {
   try {
-    //const storedUser = localStorage.getItem("InventoryUser");
-    //const inventoryUser = storedUser ? JSON.parse(storedUser) : null;
+    const storedUser = localStorage.getItem("InventoryUser");
+    const inventoryUser = storedUser ? JSON.parse(storedUser) : null;
 
     return (
       // "https://serverinventorydaherserver.onrender.com"
-      // inventoryUser?.serverURL ||
-      // import.meta.env.VITE_API_BASE_URL ||
+      inventoryUser?.serverURL ||
+      import.meta.env.VITE_API_BASE_URL ||
       "https://serverinventorydaherserver.onrender.com"
     );
   } catch (error) {
@@ -39,6 +39,18 @@ apiClient.interceptors.request.use(
     const token = localStorage.getItem("auth_token");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    const storedUser = localStorage.getItem("InventoryUser");
+    const inventoryUser = storedUser ? JSON.parse(storedUser) : null;
+    const userId = inventoryUser?.id || inventoryUser?._id || inventoryUser?.username;
+
+    if (userId) {
+      config.headers["X-Inventory-User-Id"] = userId;
+    }
+
+    if (inventoryUser?.username) {
+      config.headers["X-Inventory-Username"] = inventoryUser.username;
     }
 
     // 🔥 تحديث baseURL في كل طلب (لو تغير المستخدم)

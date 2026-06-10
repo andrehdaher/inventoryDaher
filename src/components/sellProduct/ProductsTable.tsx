@@ -1,7 +1,8 @@
-import React, { useState, useMemo, useEffect } from "react";
-import { Input } from "@/components/ui/input";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import QrScannerButton from "@/components/Products/QrScannerButton";
 import { Button } from "@/components/ui/button";
-import { Product } from "@/services/transaction"; // استورد واجهة Product
+import { Input } from "@/components/ui/input";
+import { Product } from "@/services/transaction";
 import { X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -9,154 +10,285 @@ type SelectedProduct = Product & { qty: number };
 
 interface ProductsTableProps {
   products: Product[];
+  selectedProducts?: SelectedProduct[];
   onChange: (selected: SelectedProduct[]) => void;
-  setAmount: any;
+  setAmount?: any;
 }
 
-const ProductsTable: React.FC<ProductsTableProps> = ({ products, onChange, setAmount }) => {
+const ProductsTable: React.FC<ProductsTableProps> = ({
+  products = [],
+  selectedProducts: controlledSelectedProducts,
+  onChange,
+  setAmount,
+}) => {
   const [search, setSearch] = useState("");
-  const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>([]);
+  const [internalSelectedProducts, setInternalSelectedProducts] = useState<
+    SelectedProduct[]
+  >([]);
+  const isControlled = controlledSelectedProducts !== undefined;
+  const selectedProducts = controlledSelectedProducts || internalSelectedProducts;
+  const selectedProductsRef = useRef<SelectedProduct[]>(selectedProducts);
 
-  // البحث عن المنتجات
-  const filteredProducts = useMemo(
-    () =>
-      products.filter((p) =>
-        p?.name?.toLowerCase().includes(search.toLowerCase()) ||
-        p?.code?.toLowerCase().includes(search.toLowerCase())
-      ),
-    [products, search]
-  );
+  useEffect(() => {
+    selectedProductsRef.current = selectedProducts;
+  }, [selectedProducts]);
 
-  // إضافة منتج
-  const addProduct = (product: Product) => {
-    const exists = selectedProducts.find((p) => p.id === product.id);
-    if (exists) {
-      updateQty(product.id, exists.qty + 1);
-    } else {
-      const newSelected = [...selectedProducts, { ...product, qty: 1 }];
-      setSelectedProducts(newSelected);
-      onChange(newSelected);
+  const commitSelectedProducts = (
+    updater:
+      | SelectedProduct[]
+      | ((currentProducts: SelectedProduct[]) => SelectedProduct[]),
+  ) => {
+    const resolveNextProducts = (currentProducts: SelectedProduct[]) =>
+      typeof updater === "function" ? updater(currentProducts) : updater;
+
+    if (isControlled) {
+      const nextProducts = resolveNextProducts(selectedProductsRef.current);
+      selectedProductsRef.current = nextProducts;
+      onChange(nextProducts);
+      return;
     }
+
+    setInternalSelectedProducts((currentProducts) => {
+      const nextProducts = resolveNextProducts(currentProducts);
+      selectedProductsRef.current = nextProducts;
+      onChange(nextProducts);
+      return nextProducts;
+    });
   };
 
-  // تحديث الكمية
+  const filteredProducts = useMemo(
+    () =>
+      products.filter(
+        (p) =>
+          p?.name?.toLowerCase().includes(search.toLowerCase()) ||
+          p?.code?.toLowerCase().includes(search.toLowerCase()),
+      ),
+    [products, search],
+  );
+
   const updateQty = (id: string, qty: number) => {
     if (qty > products.find((p) => p.id === id)?.quantity!) {
       toast.error("الكمية المطلوبة غير متوفرة في المخزون");
       return;
     }
-    const newSelected = selectedProducts
-      .map((p) => (p.id === id ? { ...p, qty } : p))
-      .filter((p) => p.qty >= 0);
-    setSelectedProducts(newSelected);
-    onChange(newSelected);
+
+    commitSelectedProducts((current) => {
+      const newSelected = current
+        .map((p) => (p.id === id ? { ...p, qty } : p))
+        .filter((p) => p.qty >= 0);
+      return newSelected;
+    });
   };
+
+  const addProduct = (product: Product) => {
+    commitSelectedProducts((current) => {
+      const exists = current.find((p) => p.id === product.id);
+
+      if (exists) {
+        const nextQty = exists.qty + 1;
+        if (nextQty > product.quantity) {
+          toast.error("الكمية المطلوبة غير متوفرة في المخزون");
+          return current;
+        }
+
+        const newSelected = current.map((p) =>
+          p.id === product.id ? { ...p, qty: nextQty } : p,
+        );
+        return newSelected;
+      }
+
+      const newSelected = [...current, { ...product, qty: 1 }];
+      return newSelected;
+    });
+  };
+
+  const handleQrScan = (code: string) => {
+    setSearch(code);
+
+    const product = products.find(
+      (p) => p?.code?.trim().toLowerCase() === code.trim().toLowerCase(),
+    );
+
+    if (!product) {
+      toast.error("لم يتم العثور على منتج بهذا الرمز");
+      return false;
+    }
+
+    addProduct(product);
+    toast.success("تمت إضافة المنتج من رمز QR");
+    return true;
+  };
+
   const updatePrice = (id: string, price: number) => {
-    const newSelected = selectedProducts
-      .map((p) => (p.id === id ? { ...p, sellPrice: price } : p))
-      .filter((p) => p.qty >= 0);
-    setSelectedProducts(newSelected);
-    onChange(newSelected);
+    commitSelectedProducts((current) =>
+      current
+        .map((p) => (p.id === id ? { ...p, sellPrice: price } : p))
+        .filter((p) => p.qty >= 0),
+    );
   };
 
-  // حذف المنتج
   const removeProduct = (id: string) => {
-    const newSelected = selectedProducts.filter((p) => p.id !== id);
-    setSelectedProducts(newSelected);
-    onChange(newSelected);
+    commitSelectedProducts((current) => current.filter((p) => p.id !== id));
   };
 
-  // إجمالي الفاتورة
   const total = selectedProducts.reduce((sum, p) => sum + p.sellPrice * p.qty, 0);
-  useEffect(()=>{
-    setAmount(total)
-  }, [total])
+
+  useEffect(() => {
+    setAmount?.(total);
+  }, [setAmount, total]);
 
   return (
-    <div className="p-4 bg-white rounded-lg shadow">
-      <h3 className="text-lg font-bold mb-2">اختيار المنتجات</h3>
+    <div className="rounded-lg bg-white p-3 shadow sm:p-4" dir="rtl">
+      <h3 className="mb-3 text-lg font-bold">اختيار المنتجات</h3>
 
-      <Input
-        placeholder="ابحث عن المنتج بالاسم أو الكود..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        className="mb-2"
-      />
+      <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+        <Input
+          placeholder="ابحث عن المنتج بالاسم أو الكود..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="h-11"
+        />
+        <QrScannerButton
+          onScan={handleQrScan}
+          className="h-11 w-full sm:w-auto"
+        />
+      </div>
 
-      {/* قائمة البحث */}
       {search && filteredProducts.length > 0 && (
-        <div className="max-h-40 overflow-y-auto border p-2 rounded mb-4">
+        <div className="mb-4 max-h-64 overflow-y-auto rounded-md border">
           {filteredProducts.map((p) => (
-            <div
+            <button
               key={p.id}
-              className="flex justify-between items-center p-1 hover:bg-gray-100 cursor-pointer"
+              type="button"
+              className="flex w-full flex-col gap-1 border-b p-3 text-right text-sm last:border-b-0 hover:bg-gray-100 sm:flex-row sm:items-center sm:justify-between"
               onClick={() => addProduct(p)}
             >
-              <span>{p.name} ({p.code}) - ${p.sellPrice} / {p.warehouse}</span>
-              <span>المخزون: {p.quantity}</span>
-            </div>
+              <span className="font-medium">
+                {p.name} ({p.code}) - ${p.sellPrice}
+              </span>
+              <span className="text-muted-foreground">
+                {p.warehouse} | المخزون: {p.quantity}
+              </span>
+            </button>
           ))}
         </div>
       )}
 
-      {/* جدول المنتجات المختارة */}
       {selectedProducts.length > 0 && (
-        <table className="w-full border-collapse">
-          <thead>
-            <tr>
-              <th className="border p-1">المنتج</th>
-              <th className="border p-1">الكود</th>
-              <th className="border p-1">السعر</th>
-              <th className="border p-1">الكمية</th>
-              <th className="border p-1">المجموع</th>
-              <th className="border p-1">حذف</th>
-            </tr>
-          </thead>
-          <tbody>
+        <>
+          <div className="space-y-3 md:hidden">
             {selectedProducts.map((p) => (
-              <tr key={p.id}>
-                <td className="border p-1">{p.name}</td>
-                <td className="border p-1">{p.code}</td>
-                <td className="border p-1">
-                  <Input
-                    type="number"
-                    min={0}
-                    value={p.sellPrice}
-                    onChange={(e) => updatePrice(p.id, Number(e.target.value))}
-                    className="w-16"
-                  />
-                </td>
-                <td className="border p-1">
-                  <Input
-                    type="number"
-                    min={1}
-                    value={p.qty}
-                    onChange={(e) => updateQty(p.id, Number(e.target.value))}
-                    className="w-16"
-                  />
-                </td>
-                <td className="border p-1">${(p.sellPrice * p.qty).toFixed(2)}</td>
-                <td className="border p-1 text-center">
+              <div key={p.id} className="rounded-md border p-3">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">{p.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {p.code} | {p.warehouse}
+                    </p>
+                  </div>
                   <Button
+                    type="button"
                     variant="destructive"
-                    size="sm"
+                    size="icon"
                     onClick={() => removeProduct(p.id)}
                   >
-                    <X />
+                    <X className="h-4 w-4" />
                   </Button>
-                </td>
-              </tr>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="space-y-1 text-sm">
+                    <span>السعر</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={p.sellPrice}
+                      onChange={(e) => updatePrice(p.id, Number(e.target.value))}
+                      className="h-10"
+                    />
+                  </label>
+                  <label className="space-y-1 text-sm">
+                    <span>الكمية</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={p.qty}
+                      onChange={(e) => updateQty(p.id, Number(e.target.value))}
+                      className="h-10"
+                    />
+                  </label>
+                </div>
+                <p className="mt-3 text-left font-bold">
+                  ${(p.sellPrice * p.qty).toFixed(2)}
+                </p>
+              </div>
             ))}
-            <tr>
-              <td colSpan={4} className="border p-1 font-bold text-right">
-                الإجمالي
-              </td>
-              <td colSpan={2} className="border p-1 font-bold">
-                ${total.toFixed(2)}
-              </td>
-            </tr>
-          </tbody>
-        </table>
+            <div className="rounded-md border bg-muted/40 p-3 text-left font-bold">
+              الإجمالي: ${total.toFixed(2)}
+            </div>
+          </div>
+
+          <div className="hidden overflow-x-auto rounded-md border md:block">
+            <table className="w-full min-w-[720px] border-collapse text-sm">
+              <thead>
+                <tr>
+                  <th className="border p-2">المنتج</th>
+                  <th className="border p-2">الكود</th>
+                  <th className="border p-2">السعر</th>
+                  <th className="border p-2">الكمية</th>
+                  <th className="border p-2">المجموع</th>
+                  <th className="border p-2">حذف</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedProducts.map((p) => (
+                  <tr key={p.id}>
+                    <td className="border p-2">{p.name}</td>
+                    <td className="border p-2">{p.code}</td>
+                    <td className="border p-2">
+                      <Input
+                        type="number"
+                        min={0}
+                        value={p.sellPrice}
+                        onChange={(e) => updatePrice(p.id, Number(e.target.value))}
+                        className="w-24"
+                      />
+                    </td>
+                    <td className="border p-2">
+                      <Input
+                        type="number"
+                        min={1}
+                        value={p.qty}
+                        onChange={(e) => updateQty(p.id, Number(e.target.value))}
+                        className="w-24"
+                      />
+                    </td>
+                    <td className="border p-2">
+                      ${(p.sellPrice * p.qty).toFixed(2)}
+                    </td>
+                    <td className="border p-2 text-center">
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => removeProduct(p.id)}
+                      >
+                        <X />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+                <tr>
+                  <td colSpan={4} className="border p-2 text-right font-bold">
+                    الإجمالي
+                  </td>
+                  <td colSpan={2} className="border p-2 font-bold">
+                    ${total.toFixed(2)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   );

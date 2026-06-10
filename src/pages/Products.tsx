@@ -9,6 +9,7 @@ import FilterSelection from "@/components/ui/custom/FilterSelection";
 import FormInput from "@/components/ui/custom/FormInput";
 import Loading from "@/components/ui/custom/Loading";
 import { useProductContext } from "@/contexts/ProductContext";
+import { getProductAlertLimit } from "@/lib/productStock";
 import { Box } from "lucide-react";
 import { useState, useMemo } from "react";
 
@@ -21,6 +22,9 @@ export interface ProductTableRow {
   sellPrice: number;
   category: string;
   unit: string;
+  alertQuantity?: number;
+  lowStockLimit?: number;
+  minQuantity?: number;
 }
 
 export default function Products() {
@@ -60,19 +64,22 @@ export default function Products() {
       rows = rows.filter((p) =>
         stockFilter === "out"
           ? p.quantity === 0
-          : p.quantity > 0 && p.quantity < 5,
+          : p.quantity > 0 && p.quantity <= getProductAlertLimit(p),
       );
     }
 
     if (onlyLowStock) {
-      rows = rows.filter((p) => p.quantity <= 5);
+      rows = rows.filter((p) => p.quantity <= getProductAlertLimit(p));
     }
 
     rows = rows.filter(
       (p) => p.sellPrice >= priceRange[0] && p.sellPrice <= priceRange[1],
     );
 
-    return rows;
+    return rows.map((product) => ({
+      ...product,
+      alertQuantity: getProductAlertLimit(product),
+    }));
   }, [
     products,
     warehouseFilter,

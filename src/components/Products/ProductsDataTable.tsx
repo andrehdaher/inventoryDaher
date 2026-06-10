@@ -3,7 +3,8 @@ import { useState } from "react";
 import { DataTable } from "../dashboard/DataTable";
 import { Button } from "../ui/button";
 import { Product } from "@/services/transaction";
-import { ProductTableRow } from "@/pages/Products";
+import { getProductAlertLimit } from "@/lib/productStock";
+import type { ProductTableRow } from "@/pages/Products";
 import BulkPriceIncreaseForm from "./BulkPriceIncreaseForm";
 
 type productDataTableProp = {
@@ -23,6 +24,7 @@ const ProductsDataTable = ({ productsData, setEditRow, setOpenForm, setOpenTrans
     { key: "code", label: "الرمز", sortable: true },
     { key: "name", label: "الاسم", sortable: true },
     { key: "quantity", label: "الكمية", sortable: true },
+    { key: "alertQuantity", label: "حد التنبيه", sortable: true },
     { key: "warehouse", label: "المخزن", sortable: true },
     { key: "payPrice", label: "سعر الشراء", sortable: true, onlyAdmin: true },
     { key: "sellPrice", label: "سعر المبيع", sortable: true },
@@ -65,7 +67,7 @@ const ProductsDataTable = ({ productsData, setEditRow, setOpenForm, setOpenTrans
         getRowClassName={(row) =>
           row.quantity === 0
             ? "bg-destructive/20 hover:bg-destructive/40"
-            : row.quantity < 5
+            : row.quantity <= getProductAlertLimit(row)
               ? "bg-yellow-500/20 hover:bg-yellow-500/40"
               : ""
         }

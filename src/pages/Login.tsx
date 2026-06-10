@@ -30,6 +30,12 @@ export default function Login() {
 
       if (res?.message?.includes("بنجاح")) {
         localStorage.setItem("InventoryUser", JSON.stringify(res.user));
+        const token = res?.token || res?.accessToken || res?.user?.token;
+
+        if (token) {
+          localStorage.setItem("auth_token", token);
+        }
+
         navigate("/home");
         toast.success("تم تسجيل الدخول بنجاح");
       } else {

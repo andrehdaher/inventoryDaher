@@ -1,4 +1,10 @@
 import apiClient from "@/lib/axios";
+import {
+    getOfflineCache,
+    isBrowserOnline,
+    setOfflineCache,
+} from "@/lib/offlineStore";
+import { offlineCacheKeys } from "@/services/offlineSales";
 
 export default async function createChartAccount(formData: object) {
     try {
@@ -11,10 +17,25 @@ export default async function createChartAccount(formData: object) {
 }
 
 export async function getAccount() {
-    try {
+    if (!isBrowserOnline()) {
+        const cachedAccounts = await getOfflineCache(offlineCacheKeys.accounts);
+
+        if (cachedAccounts) {
+            return cachedAccounts;
+        }
+    }
+
+        try {
         const res = await apiClient.get('/api/account/get-account')
+        await setOfflineCache(offlineCacheKeys.accounts, res.data)
         return res.data
     } catch (err) {
+        const cachedAccounts = await getOfflineCache(offlineCacheKeys.accounts);
+
+        if (cachedAccounts) {
+            return cachedAccounts;
+        }
+
         console.error("خطأ في جلب الحساب:", err);
         throw new Error("خطأ أثناء جلب حساب");
     }

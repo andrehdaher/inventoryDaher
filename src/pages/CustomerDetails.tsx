@@ -369,7 +369,7 @@ export default function CustomerDetails() {
                     >
                       <form
                         className="space-y-4"
-                        onSubmit={(e) => {
+                        onSubmit={async (e) => {
                           e.preventDefault();
                           if (!salesAccountId || !receivableAccountId) {
                             toast.error(
@@ -394,7 +394,7 @@ export default function CustomerDetails() {
                               customerName: customer.name,
                               customerId: row.customerId,
                               warehouse: p.warehouse,
-                              qty: -Number(returnAmounts[p.id]),
+                              qty: Number(returnAmounts[p.id]),
                               returnValue:
                                 Number(returnAmounts[p.id]) * p.sellPrice,
                               referenceId: row.id,
@@ -406,13 +406,33 @@ export default function CustomerDetails() {
                               salesAccountId,
                             }));
 
-                          productsToReturn.forEach((prod) => {
-                            console.log(prod);
-                            returnMutation.mutate(prod);
-                          });
-                          toast.success("تم تسجيل الإرجاع بنجاح!");
-                          setOpenReturnId(null);
-                          setReturnAmounts({});
+                          if (!productsToReturn.length) {
+                            toast.error("يرجى تحديد كمية إرجاع واحدة على الأقل");
+                            return;
+                          }
+
+                          const totalReturnValue = productsToReturn.reduce(
+                            (sum, prod) => sum + prod.returnValue,
+                            0,
+                          );
+
+                          if (isDebt === "part" && partValue > totalReturnValue) {
+                            toast.error("قيمة الدفع الجزئي أكبر من قيمة الإرجاع");
+                            return;
+                          }
+
+                          try {
+                            await Promise.all(
+                              productsToReturn.map((prod) =>
+                                returnMutation.mutateAsync(prod),
+                              ),
+                            );
+                            toast.success("تم تسجيل الإرجاع بنجاح!");
+                            setOpenReturnId(null);
+                            setReturnAmounts({});
+                          } catch (error) {
+                            console.error(error);
+                          }
                         }}
                       >
                         <div className="max-h-96 overflow-y-auto mt-4 border-2 rounded-md ">

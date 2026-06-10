@@ -1,6 +1,7 @@
 import AccountSelect from "@/components/Accounts/AccountSelect";
 import SupplierSelect from "@/components/Products/SupplierSelect";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import QrScannerButton from "@/components/Products/QrScannerButton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -141,6 +142,24 @@ export default function Purchases() {
     setSearch("");
   };
 
+  const handleQrScan = (code: string) => {
+    setSearch(code);
+
+    const product = products.find(
+      (item: Product) =>
+        item?.code?.trim().toLowerCase() === code.trim().toLowerCase(),
+    );
+
+    if (!product) {
+      toast.error("لم يتم العثور على منتج بهذا الرمز");
+      return false;
+    }
+
+    addProduct(product);
+    toast.success("تمت إضافة المنتج من رمز QR");
+    return true;
+  };
+
   const updateSelectedProduct = (
     id: string,
     key: "qty" | "purchasePayPrice" | "purchaseSellPrice",
@@ -272,6 +291,7 @@ export default function Purchases() {
           payPrice: toNumber(product.purchasePayPrice),
           sellPrice: toNumber(product.purchaseSellPrice),
           unit: product.unit,
+          alertQuantity: product.alertQuantity,
           lineTotal: toNumber(product.qty) * toNumber(product.purchasePayPrice),
         })),
       },
@@ -288,7 +308,7 @@ export default function Purchases() {
               فاتورة شراء متعددة المنتجات
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className="space-y-5 p-3 sm:p-6">
             <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-3">
               <FieldBlock label="المورد">
                 <SupplierSelect
@@ -320,13 +340,21 @@ export default function Purchases() {
               <label className="block text-sm font-medium leading-none">
                 المنتجات
               </label>
-              <Search className="pointer-events-none absolute right-3 top-8 h-4 w-4 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="ابحث عن المنتج بالاسم أو الكود"
-                className="h-10 pr-9"
-              />
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute right-3 top-3.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="ابحث عن المنتج بالاسم أو الكود"
+                    className="h-11 pr-9"
+                  />
+                </div>
+                <QrScannerButton
+                  onScan={handleQrScan}
+                  className="h-11 w-full sm:w-auto"
+                />
+              </div>
 
               {filteredProducts.length > 0 && (
                 <div className="absolute z-20 mt-2 max-h-72 w-full overflow-auto rounded-md border bg-background shadow-lg">
@@ -349,7 +377,89 @@ export default function Purchases() {
               )}
             </div>
 
-            <div className="overflow-x-auto rounded-md border">
+            <div className="space-y-3 md:hidden">
+              {selectedProducts.length === 0 ? (
+                <div className="rounded-md border p-6 text-center text-muted-foreground">
+                  لم تتم إضافة منتجات بعد
+                </div>
+              ) : (
+                selectedProducts.map((product) => (
+                  <div key={product.id} className="rounded-md border p-3">
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold">{product.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {product.code} | {product.warehouse}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="destructive"
+                        onClick={() => removeProduct(product.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <FieldBlock label="الكمية">
+                        <Input
+                          type="number"
+                          min={1}
+                          value={product.qty}
+                          onChange={(event) =>
+                            updateSelectedProduct(
+                              product.id,
+                              "qty",
+                              toNumber(event.target.value),
+                            )
+                          }
+                          className="h-10"
+                        />
+                      </FieldBlock>
+                      <FieldBlock label="سعر الشراء">
+                        <Input
+                          type="number"
+                          min={0}
+                          value={product.purchasePayPrice}
+                          onChange={(event) =>
+                            updateSelectedProduct(
+                              product.id,
+                              "purchasePayPrice",
+                              toNumber(event.target.value),
+                            )
+                          }
+                          className="h-10"
+                        />
+                      </FieldBlock>
+                      <FieldBlock label="سعر البيع">
+                        <Input
+                          type="number"
+                          min={0}
+                          value={product.purchaseSellPrice}
+                          onChange={(event) =>
+                            updateSelectedProduct(
+                              product.id,
+                              "purchaseSellPrice",
+                              toNumber(event.target.value),
+                            )
+                          }
+                          className="h-10"
+                        />
+                      </FieldBlock>
+                    </div>
+                    <p className="mt-3 text-left font-bold">
+                      {(
+                        toNumber(product.qty) *
+                        toNumber(product.purchasePayPrice)
+                      ).toFixed(2)}
+                    </p>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="hidden overflow-x-auto rounded-md border md:block">
               <table className="w-full min-w-[860px] border-collapse text-sm">
                 <thead className="bg-muted">
                   <tr>

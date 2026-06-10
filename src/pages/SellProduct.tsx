@@ -3,6 +3,7 @@ import AddCustomerForm from "@/components/Customers/AddCustomerForm";
 import { DataTable } from "@/components/dashboard/DataTable";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import ProductsTable from "@/components/sellProduct/ProductsTable";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import FormInput from "@/components/ui/custom/FormInput";
@@ -13,78 +14,97 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useInvoiceDraftSync } from "@/hooks/useInvoiceDraftSync";
+import { useOfflineSalesSync } from "@/hooks/useOfflineSalesSync";
 import getAllCustomer from "@/services/customer";
+import {
+  checkoutMyInvoiceDraft,
+  InvoicePaymentStatus,
+} from "@/services/invoiceDraft";
+import { enqueueOfflineSale } from "@/services/offlineSales";
 import getAllProducts from "@/services/products";
-import { sell, sellProducts } from "@/services/transaction";
+import { sell } from "@/services/transaction";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import React, { useEffect, useState } from "react";
+import { RefreshCw, Wifi, WifiOff } from "lucide-react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 export default function SellProduct() {
-  const [isOpen, setIsOpen] = React.useState(false);
-  const [selectedProducts, setSelectedProducts] = useState<any[]>([]);
-  const [discount, setDiscount] = useState("");
-  const [amount, setAmount] = useState("");
-  const [finalAmount, setFinalAmount] = useState(0);
-  const [selectedRows, setSelectedRows] = useState<any[]>([]);
-  const [isDebt, setIsDebt] = useState<"cash" | "part" | "debt">("cash");
-  const [partValue, setPartValue] = useState("");
-  const [currency, setCurrency] = useState("");
-  const [exchangeRate, setExchangeRate] = useState(1);
-  const [paymentAccountId, setPaymentAccountId] = useState("");
-  const [receivableAccountId, setReceivableAccountId] = useState("");
-  const [salesAccountId, setSalesAccountId] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+
+  const {
+    draft,
+    isConnected,
+    isLoading,
+    isSyncing,
+    lastSyncedAt,
+    syncError,
+    patchDraft,
+    clearDraft,
+  } = useInvoiceDraftSync();
 
   const queryClient = useQueryClient();
+  const {
+    isOnline,
+    pendingSalesCount,
+    isSyncingOfflineSales,
+    refreshPendingSalesCount,
+    syncOfflineSales,
+  } = useOfflineSalesSync(queryClient);
+
+  const selectedProducts = draft.products;
+  const discount = draft.discount;
+  const paymentStatus = draft.paymentStatus;
+  const partValue = draft.partValue;
+  const currency = draft.currency;
+  const exchangeRate = draft.exchangeRate;
+  const paymentAccountId = draft.paymentAccountId;
+  const receivableAccountId = draft.receivableAccountId;
+  const salesAccountId = draft.salesAccountId;
+
+  const amount = useMemo(
+    () =>
+      selectedProducts.reduce(
+        (sum, product) => sum + product.sellPrice * product.qty,
+        0,
+      ),
+    [selectedProducts],
+  );
+
+  const finalAmount = useMemo(
+    () => Number((amount - Number(discount || 0)).toFixed(3)),
+    [amount, discount],
+  );
 
   const sellProductMutation = useMutation({
-    mutationFn: (dataToSend: sell) => sellProducts({ newSell: dataToSend }),
-    onSuccess: () => {
-      toast.success("تم بيع المنتج بنجاح!");
-      setSelectedProducts([]);
-      setDiscount("");
-      setAmount("");
-      setFinalAmount(0);
-      setSelectedRows([]);
-      setIsDebt("cash");
-      setPartValue("");
-      setCurrency("");
-      setExchangeRate(1);
-      setPaymentAccountId("");
-      setReceivableAccountId("");
-      setSalesAccountId("");
-      queryClient.invalidateQueries({
-        queryKey: ["sells-table"],
-      });
+    mutationFn: (dataToSend: sell) => checkoutMyInvoiceDraft(dataToSend),
+    onSuccess: async () => {
+      toast.success("تم إنشاء الفاتورة بنجاح");
+      await clearDraft();
+      await refreshPendingSalesCount();
+      queryClient.invalidateQueries({ queryKey: ["sells-table"] });
+      queryClient.invalidateQueries({ queryKey: ["products-table"] });
     },
-    onError: (error) => {
+    onError: async (error, dataToSend) => {
       console.error(error);
-      toast.error("حدث خطأ أثناء بيع المنتج");
+
+      if (!isOnline || !(error as any)?.response) {
+        await enqueueOfflineSale(dataToSend);
+        await clearDraft({ localOnly: true });
+        await refreshPendingSalesCount();
+        queryClient.invalidateQueries({ queryKey: ["products-table"] });
+        toast.success("تم حفظ الفاتورة محليا وسيتم إرسالها عند عودة الإنترنت");
+        return;
+      }
+
+      toast.error("حدث خطأ أثناء إنشاء الفاتورة");
     },
   });
-
-  const isRowSelected = (row: any) => {
-    return selectedRows.some((r) => JSON.stringify(r) === JSON.stringify(row));
-  };
-
-  const toggleRowSelection = (row: any) => {
-    setSelectedRows((prev) => {
-      const isSelected = isRowSelected(row);
-      if (isSelected) {
-        return prev.filter((r) => JSON.stringify(r) !== JSON.stringify(row));
-      }
-      return [row];
-    });
-  };
 
   const { data: products } = useQuery({
     queryKey: ["products-table"],
     queryFn: getAllProducts,
   });
-
-  useEffect(() => {
-    setFinalAmount(Number((Number(amount) - Number(discount)).toFixed(3)));
-  }, [discount, amount]);
 
   const { data: customers } = useQuery({
     queryKey: ["customers-table"],
@@ -97,18 +117,54 @@ export default function SellProduct() {
     { key: "number", label: "الرقم", sortable: true },
   ];
 
+  const toggleRowSelection = (row: any) => {
+    const isSelected = String(draft.customerId) === String(row.id);
+    const nextCustomerId = isSelected ? "" : String(row.id);
+
+    patchDraft({ customerId: nextCustomerId }, { immediate: true });
+  };
+
+  const setPaymentStatus = (nextStatus: InvoicePaymentStatus) => {
+    patchDraft({ paymentStatus: nextStatus }, { immediate: true });
+  };
+
   const validateAccounts = () => {
     if (!salesAccountId) {
       toast.error("الرجاء اختيار حساب المبيعات");
       return false;
     }
 
-    if ((isDebt === "cash" || isDebt === "part") && !paymentAccountId) {
+    if ((paymentStatus === "cash" || paymentStatus === "part") && !currency) {
+      toast.error("الرجاء اختيار العملة المدفوعة");
+      return false;
+    }
+
+    if (
+      (paymentStatus === "cash" || paymentStatus === "part") &&
+      currency !== "USD" &&
+      (!exchangeRate || exchangeRate <= 0)
+    ) {
+      toast.error("الرجاء إدخال سعر صرف صحيح");
+      return false;
+    }
+
+    if (paymentStatus === "part" && Number(partValue || 0) <= 0) {
+      toast.error("الرجاء إدخال قيمة الدفعة");
+      return false;
+    }
+
+    if (
+      (paymentStatus === "cash" || paymentStatus === "part") &&
+      !paymentAccountId
+    ) {
       toast.error("الرجاء اختيار حساب القبض");
       return false;
     }
 
-    if ((isDebt === "debt" || isDebt === "part") && !receivableAccountId) {
+    if (
+      (paymentStatus === "debt" || paymentStatus === "part") &&
+      !receivableAccountId
+    ) {
       toast.error("الرجاء اختيار حساب العملاء");
       return false;
     }
@@ -116,13 +172,142 @@ export default function SellProduct() {
     return true;
   };
 
+  const handleSubmit = async () => {
+    if (!draft.customerId) {
+      toast.error("الرجاء التأكد من اختيار زبون");
+      return;
+    }
+
+    if (!selectedProducts.length) {
+      toast.error("الرجاء اختيار منتج واحد على الأقل");
+      return;
+    }
+
+    if (!validateAccounts()) {
+      return;
+    }
+
+    const paidAmount =
+      paymentStatus === "cash"
+        ? finalAmount
+        : paymentStatus === "part"
+          ? currency === "USD"
+            ? Number(partValue)
+            : Number((Number(partValue) / exchangeRate).toFixed(1))
+          : 0;
+
+    const saleData: sell = {
+      customerId: draft.customerId,
+      totalPrice: finalAmount,
+      products: selectedProducts,
+      paymentStatus,
+      remainingDebt: paymentStatus === "cash" ? 0 : finalAmount - paidAmount,
+      paymentAccountId:
+        paymentStatus === "debt" ? undefined : paymentAccountId,
+      receivableAccountId:
+        paymentStatus === "cash" ? undefined : receivableAccountId,
+      salesAccountId,
+      currency,
+      exchangeRate,
+      amount_base: finalAmount * exchangeRate,
+      partValue: Number(partValue || 0),
+    };
+
+    if (!isOnline) {
+      await enqueueOfflineSale(saleData);
+      await clearDraft({ localOnly: true });
+      await refreshPendingSalesCount();
+      queryClient.invalidateQueries({ queryKey: ["products-table"] });
+      toast.success("تم حفظ الفاتورة محليا وسيتم إرسالها عند عودة الإنترنت");
+      return;
+    }
+
+    sellProductMutation.mutate(saleData);
+  };
+
   return (
     <DashboardLayout>
-      <Card>
-        <CardHeader>
-          <h1 className="text-2xl font-bold">بيع المنتجات</h1>
+      <Card className="overflow-hidden" dir="rtl">
+        <CardHeader className="p-4 sm:p-6">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h1 className="text-xl font-bold sm:text-2xl">بيع المنتجات</h1>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                <Badge
+                  variant={!isOnline ? "destructive" : isConnected ? "default" : "outline"}
+                  className="gap-1"
+                >
+                  {isOnline && isConnected ? (
+                    <Wifi className="h-3.5 w-3.5" />
+                  ) : (
+                    <WifiOff className="h-3.5 w-3.5" />
+                  )}
+                  {!isOnline
+                    ? "بدون إنترنت"
+                    : isConnected
+                      ? "متصل لحظيا"
+                      : "متصل بدون مزامنة لحظية"}
+                </Badge>
+
+                {pendingSalesCount > 0 && (
+                  <Badge variant="secondary" className="gap-1">
+                    فواتير محلية: {pendingSalesCount}
+                  </Badge>
+                )}
+
+                {pendingSalesCount > 0 && isOnline && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void syncOfflineSales()}
+                    disabled={isSyncingOfflineSales}
+                    loading={isSyncingOfflineSales}
+                    className="h-7 px-2 text-xs"
+                  >
+                    إرسال الآن
+                  </Button>
+                )}
+
+                {isSyncing && (
+                  <Badge variant="secondary" className="gap-1">
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    جاري المزامنة
+                  </Badge>
+                )}
+
+                {isLoading && <span>تحميل مسودة الفاتورة...</span>}
+
+                {lastSyncedAt && !isLoading && (
+                  <span className="text-muted-foreground">
+                    آخر تحديث:{" "}
+                    {lastSyncedAt.toLocaleTimeString("ar-SY", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                    })}
+                  </span>
+                )}
+
+                {syncError && (
+                  <span className="text-destructive">{syncError}</span>
+                )}
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void clearDraft()}
+              disabled={isSyncing || sellProductMutation.isPending}
+              className="w-full md:w-auto"
+            >
+              تفريغ المسودة
+            </Button>
+          </div>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-2">
+
+        <CardContent className="grid grid-cols-1 gap-4 p-3 sm:p-6 md:grid-cols-3">
           <div className="md:col-span-1">
             <DataTable
               title="الزبائن"
@@ -130,14 +315,14 @@ export default function SellProduct() {
                 <AddCustomerForm
                   isOpen={isOpen}
                   setIsOpen={setIsOpen}
-                  className="w-full mb-2"
+                  className="mb-2 w-full"
                 />
               }
               columns={customerColumns || []}
               data={customers || []}
               onRowClick={(row) => toggleRowSelection(row)}
               getRowClassName={(row) =>
-                selectedRows?.some((r) => r === row)
+                String(row.id) === String(draft.customerId)
                   ? "bg-green-50 hover:bg-green-100"
                   : ""
               }
@@ -147,18 +332,22 @@ export default function SellProduct() {
           <div className="md:col-span-2">
             <ProductsTable
               products={products}
-              setAmount={setAmount}
-              onChange={(selected) => setSelectedProducts(selected)}
+              selectedProducts={selectedProducts}
+              onChange={(selected) =>
+                patchDraft({ products: selected }, { immediate: true })
+              }
             />
           </div>
 
-          <form className="md:col-span-3 mt-8 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <form className="mt-2 grid grid-cols-1 gap-3 md:col-span-3 md:grid-cols-2">
             <FormInput
               label="الحسم"
               id="discount-amount"
               type="text"
               value={discount}
-              onChange={(e) => setDiscount(e.target.value)}
+              onChange={(event) =>
+                patchDraft({ discount: event.target.value })
+              }
             />
 
             <FormInput
@@ -171,50 +360,61 @@ export default function SellProduct() {
 
             <div className="grid grid-cols-3 gap-2 md:col-span-2">
               <Button
-                onClick={() => setIsDebt("cash")}
-                className="col-span-1"
-                variant={isDebt === "cash" ? "default" : "outline"}
+                onClick={() => setPaymentStatus("cash")}
+                className="col-span-1 h-11"
+                variant={paymentStatus === "cash" ? "default" : "outline"}
                 type="button"
               >
                 نقدا
               </Button>
               <Button
-                onClick={() => setIsDebt("part")}
-                className="col-span-1"
-                variant={isDebt === "part" ? "default" : "outline"}
+                onClick={() => setPaymentStatus("part")}
+                className="col-span-1 h-11"
+                variant={paymentStatus === "part" ? "default" : "outline"}
                 type="button"
               >
                 جزئي
               </Button>
               <Button
-                onClick={() => setIsDebt("debt")}
-                className="col-span-1"
-                variant={isDebt === "debt" ? "default" : "outline"}
+                onClick={() => setPaymentStatus("debt")}
+                className="col-span-1 h-11"
+                variant={paymentStatus === "debt" ? "default" : "outline"}
                 type="button"
               >
                 دين
               </Button>
             </div>
 
-            {isDebt === "part" && (
+            {paymentStatus === "part" && (
               <FormInput
                 id="partPayment"
                 label="قيمة الدفعة"
-                value={partValue.toString()}
-                onChange={(e) => setPartValue(e.target.value)}
+                value={partValue}
+                onChange={(event) =>
+                  patchDraft({ partValue: event.target.value })
+                }
               />
             )}
 
-            {isDebt !== "debt" && (
+            {paymentStatus !== "debt" && (
               <>
-                <Select value={currency} onValueChange={setCurrency}>
-                  <SelectTrigger className="w-full mt-6">
+                <Select
+                  value={currency}
+                  onValueChange={(nextCurrency) =>
+                    patchDraft({
+                      currency: nextCurrency,
+                      exchangeRate:
+                        nextCurrency === "USD" ? 1 : exchangeRate || 1,
+                    })
+                  }
+                >
+                  <SelectTrigger className="mt-6 h-11 w-full">
                     <SelectValue placeholder="العملة المدفوع بها" />
                   </SelectTrigger>
                   <SelectContent>
-                    {["SYP", "USD"].map((c) => (
-                      <SelectItem key={c} value={c}>
-                        {c}
+                    {["SYP", "USD"].map((currencyOption) => (
+                      <SelectItem key={currencyOption} value={currencyOption}>
+                        {currencyOption}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -224,7 +424,9 @@ export default function SellProduct() {
                   id="exchangeRate"
                   label="سعر الصرف"
                   value={currency === "USD" ? 1 : exchangeRate}
-                  onChange={(e) => setExchangeRate(Number(e.target.value))}
+                  onChange={(event) =>
+                    patchDraft({ exchangeRate: Number(event.target.value) })
+                  }
                   disabled={currency === "USD"}
                 />
               </>
@@ -233,84 +435,48 @@ export default function SellProduct() {
             <AccountSelect
               label="حساب المبيعات"
               value={salesAccountId}
-              onChange={setSalesAccountId}
+              onChange={(value) =>
+                patchDraft({ salesAccountId: value }, { immediate: true })
+              }
               filterType="sales"
             />
 
-            {(isDebt === "cash" || isDebt === "part") && (
+            {(paymentStatus === "cash" || paymentStatus === "part") && (
               <AccountSelect
                 label="حساب القبض"
                 value={paymentAccountId}
-                onChange={setPaymentAccountId}
+                onChange={(value) =>
+                  patchDraft({ paymentAccountId: value }, { immediate: true })
+                }
                 filterType="payment"
               />
             )}
 
-            {(isDebt === "debt" || isDebt === "part") && (
+            {(paymentStatus === "debt" || paymentStatus === "part") && (
               <AccountSelect
                 label="حساب العملاء"
                 value={receivableAccountId}
-                onChange={setReceivableAccountId}
+                onChange={(value) =>
+                  patchDraft(
+                    { receivableAccountId: value },
+                    { immediate: true },
+                  )
+                }
                 filterType="receivable"
               />
             )}
 
             <Button
-              className="w-full md:col-span-2"
+              className="h-11 w-full md:col-span-2"
               variant="accent"
-              disabled={sellProductMutation.isPending}
+              disabled={sellProductMutation.isPending || isSyncingOfflineSales}
               loading={sellProductMutation.isPending}
-              onClick={(e) => {
-                e.preventDefault();
-
-                if (selectedRows.length <= 0) {
-                  toast.error("الرجاء التأكد من اختيار زبون");
-                  return;
-                }
-
-                if (!selectedProducts.length) {
-                  toast.error("الرجاء اختيار منتج واحد على الأقل");
-                  return;
-                }
-
-                if (!validateAccounts()) {
-                  return;
-                }
-
-                const paidAmount =
-                  isDebt === "cash"
-                    ? finalAmount
-                    : isDebt === "part"
-                      ? currency === "USD"
-                        ? Number(partValue)
-                        : Number((Number(partValue) / exchangeRate).toFixed(1))
-                      : 0;
-
-                sellProductMutation.mutate({
-                  customerId: selectedRows[0].id,
-                  totalPrice: finalAmount,
-                  products: selectedProducts,
-                  paymentStatus:
-                    isDebt === "cash"
-                      ? "cash"
-                      : isDebt === "part"
-                        ? "part"
-                        : "debt",
-                  remainingDebt:
-                    isDebt === "cash" ? 0 : finalAmount - paidAmount,
-                  paymentAccountId:
-                    isDebt === "debt" ? undefined : paymentAccountId,
-                  receivableAccountId:
-                    isDebt === "cash" ? undefined : receivableAccountId,
-                  salesAccountId,
-                  currency,
-                  exchangeRate,
-                  amount_base: finalAmount * exchangeRate,
-                  partValue: Number(partValue || 0),
-                });
+              onClick={(event) => {
+                event.preventDefault();
+                void handleSubmit();
               }}
             >
-              اتمام عملية البيع
+              {isOnline ? "إتمام عملية البيع" : "حفظ الفاتورة محليا"}
             </Button>
           </form>
         </CardContent>

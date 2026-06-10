@@ -1,10 +1,31 @@
 import apiClient from "@/lib/axios";
+import {
+  getOfflineCache,
+  isBrowserOnline,
+  setOfflineCache,
+} from "@/lib/offlineStore";
+import { offlineCacheKeys } from "@/services/offlineSales";
 
 export default async function getAllProducts() {
+  if (!isBrowserOnline()) {
+    const cachedProducts = await getOfflineCache(offlineCacheKeys.products);
+
+    if (cachedProducts) {
+      return cachedProducts;
+    }
+  }
+
   try {
     const response = await apiClient.get("/api/products");
+    await setOfflineCache(offlineCacheKeys.products, response.data);
     return response.data;
   } catch (err) {
+    const cachedProducts = await getOfflineCache(offlineCacheKeys.products);
+
+    if (cachedProducts) {
+      return cachedProducts;
+    }
+
     console.error("خطأ :", err);
     throw new Error("خطأ أثناء جلب المنتجات");
   }
@@ -24,6 +45,7 @@ export async function addProduct({
   sellPrice,
   unit,
   quantity,
+  alertQuantity,
 }) {
   try {
     const response = await apiClient.post("/api/products", {
@@ -35,6 +57,7 @@ export async function addProduct({
       sellPrice,
       unit,
       quantity,
+      alertQuantity,
     });
     return response.data;
   } catch (err) {

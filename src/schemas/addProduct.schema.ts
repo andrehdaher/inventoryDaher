@@ -9,6 +9,7 @@ export const addProductSchema = z.object({
   payPrice: z.coerce.number().positive(),
   sellPrice: z.coerce.number().positive(),
   quantity: z.coerce.number().positive(),
+  alertQuantity: z.coerce.number().min(0).default(5),
   unit: z.string().min(1),
   supplierId: z.string().min(1, "المورد مطلوب"),
 inventoryAccountId: z.string().min(1, "حساب المخزون مطلوب"),

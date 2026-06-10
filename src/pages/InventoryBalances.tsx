@@ -132,7 +132,7 @@ const normalizeWarehouses = (data: any): WarehouseRecord[] => {
 
 const getProductAlertLimit = (product: ProductRecord, defaultLimit: number) => {
   const explicitLimit =
-    product.minQuantity ?? product.lowStockLimit ?? product.alertQuantity;
+    product.alertQuantity ?? product.lowStockLimit ?? product.minQuantity;
   const limit = Number(explicitLimit);
   return Number.isFinite(limit) && explicitLimit !== undefined
     ? limit

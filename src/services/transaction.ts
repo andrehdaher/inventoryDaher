@@ -23,6 +23,7 @@ export interface sell {
     payPrice?: number;
     category?: string;
     updatedDate?: string;
+    alertQuantity?: number;
   }[];
   date?: string;
   currency: string;
@@ -60,6 +61,7 @@ export interface Product {
   sellPrice: number;
   unit: string;
   quantity: number;
+  alertQuantity?: number;
   warehouse: string;
   updatedDate: string;
 }

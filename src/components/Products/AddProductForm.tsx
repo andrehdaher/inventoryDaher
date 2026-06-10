@@ -61,6 +61,7 @@ export default function AddProductForm({
       inventoryAccountId: "",
       payableAccountId: "",
       paymentAccountId: "",
+      alertQuantity: 5,
     },
   });
 
@@ -79,6 +80,7 @@ export default function AddProductForm({
       sellPrice: row.sellPrice,
       unit: row.unit,
       quantity: row.quantity ?? 1,
+      alertQuantity: row.alertQuantity ?? row.lowStockLimit ?? row.minQuantity ?? 5,
       supplierId: row.supplierId ?? "",
       isDebt: "cash",
       currency: "USD",
@@ -168,6 +170,7 @@ export default function AddProductForm({
         sellPrice: values.sellPrice,
         unit: values.unit,
         quantity: values.quantity,
+        alertQuantity: values.alertQuantity,
       },
       newPurchase: {
         supplierId: values.supplierId,
@@ -293,6 +296,13 @@ export default function AddProductForm({
           type="number"
           {...register("quantity")}
           error={errors.quantity?.message}
+        />
+        <FormInput
+          label="حد التنبيه"
+          type="number"
+          min={0}
+          {...register("alertQuantity")}
+          error={errors.alertQuantity?.message}
         />
         <FormInput
           label="الواحدة"
