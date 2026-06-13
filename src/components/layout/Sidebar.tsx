@@ -51,7 +51,7 @@ const navigationGroups = [
   },
   {
     name: "Sell Product",
-    href: "/SellProduct",
+    href: "/sellProduct",
     icon: ShoppingCart,
     allowed: ["admin"],
   },

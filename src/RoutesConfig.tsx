@@ -1,6 +1,5 @@
 import React from "react";
 import { PrivateRoute } from "@/components/auth/PrivateRoute";
-import path from "path";
 
 // Lazy Loading للصفحات
 const Products = React.lazy(() => import("@/pages/Products"));
@@ -35,39 +34,42 @@ const Purchases =React.lazy(()=> import('@/pages/Purchases'))
 //   const AskAi = React.lazy(() => import('@/pages/AskAi'))
 // import AiReports from "@/pages/AiReports";
 
+const protect = (element: JSX.Element, allowedRoles = ["admin"]) => (
+  <PrivateRoute allowedRoles={allowedRoles}>{element}</PrivateRoute>
+);
 
 export const routesConfig = [
   { path: "/", element: <Login /> },
   { path: "/login", element: <Login /> },
-  { path: "/home", element: <Home /> },
+  { path: "/home", element: protect(<Home />, ["admin", "user"]) },
   { path: "/signUp", element: <SignUp /> },
   { path: "/unauthorized", element: <UnauthorizedPage /> },
-  { path: "/Products", element: <Products />},
-  { path: "/suppliers", element:  <Suppliers /> },
-  { path: "/customers", element:  <Customers /> },
-  { path: "/dashboard", element: <PrivateRoute allowedRoles={["admin", "user"]}><Dashboard /></PrivateRoute> },
-  { path: "/sellProduct", element: <SellProduct /> },
-  { path: "/financialStatement", element: <FinancialStatement /> },
-  { path: "/SupplierDetails", element: <SupplierDetails /> },
-  { path: "/CustomerDetails", element: <CustomerDetails /> },
-  { path: "/productDetails", element: <ProductDetails /> },
-  { path: "/sellDetails", element: <SellDetails /> },
-  { path: "/Exchange", element: <Exchange /> },
-  { path: "/warehouses", element: <Warehouses /> },
-  { path: "/Warehouses/:id", element: <WarehousesDetails /> },
-  { path: "/categories", element: <Categories /> },
-  { path: "/categories/:id", element: <CategoryDetails /> },
-  { path: "/accounts", element: <ChartAccount /> },
-  {path : '/accounts/:id' , element:<ChartAccountDetails/>},
-  { path: "/journal-entries", element: <JournalEntries /> },
-  { path: "/trial-balance", element: <TrialBalance /> },
-  { path: "/general-ledger", element: <GeneralLedger /> },
-  { path: "/general-ledger/:id", element: <GeneralLedger /> },
-  { path: "/income-statement", element: <IncomeStatement /> },
-  { path: "/profit-analysis", element: <ProfitAnalysis /> },
-  { path: "/inventory-balances", element: <InventoryBalances /> },
+  { path: "/Products", element: protect(<Products />, ["admin", "user"])},
+  { path: "/suppliers", element:  protect(<Suppliers />) },
+  { path: "/customers", element:  protect(<Customers />) },
+  { path: "/dashboard", element: protect(<Dashboard />, ["admin", "user"]) },
+  { path: "/sellProduct", element: protect(<SellProduct />) },
+  { path: "/financialStatement", element: protect(<FinancialStatement />) },
+  { path: "/SupplierDetails", element: protect(<SupplierDetails />) },
+  { path: "/CustomerDetails", element: protect(<CustomerDetails />) },
+  { path: "/productDetails", element: protect(<ProductDetails />, ["admin", "user"]) },
+  { path: "/sellDetails", element: protect(<SellDetails />) },
+  { path: "/Exchange", element: protect(<Exchange />) },
+  { path: "/warehouses", element: protect(<Warehouses />) },
+  { path: "/warehouses/:id", element: protect(<WarehousesDetails />) },
+  { path: "/categories", element: protect(<Categories />) },
+  { path: "/categories/:id", element: protect(<CategoryDetails />) },
+  { path: "/accounts", element: protect(<ChartAccount />) },
+  {path : '/accounts/:id' , element: protect(<ChartAccountDetails />)},
+  { path: "/journal-entries", element: protect(<JournalEntries />) },
+  { path: "/trial-balance", element: protect(<TrialBalance />) },
+  { path: "/general-ledger", element: protect(<GeneralLedger />) },
+  { path: "/general-ledger/:id", element: protect(<GeneralLedger />) },
+  { path: "/income-statement", element: protect(<IncomeStatement />) },
+  { path: "/profit-analysis", element: protect(<ProfitAnalysis />) },
+  { path: "/inventory-balances", element: protect(<InventoryBalances />) },
   // { path: "/ai-reports", element: <AiReports /> },
   // { path: "/ai-chat", element: <AskAi /> },
-  {path: '/purchases' , element:<Purchases/>},
+  {path: '/purchases' , element: protect(<Purchases />)},
   { path: "*", element: <NotFound /> }
 ];

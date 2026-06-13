@@ -355,8 +355,11 @@ export async function handleWarehouseTransfare(transferData: {
   quantity: number;
   note: string;
   newSellPrice?: number;
+  paymentStatus?: "cash" | "part" | "debt";
+  partValue?: number;
   expenseAccountId?: string;
   paymentAccountId?: string;
+  payableAccountId?: string;
 }) {
   try {
     const response = await apiClient.post(

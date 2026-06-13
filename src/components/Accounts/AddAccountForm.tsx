@@ -121,12 +121,14 @@ if (formData.category && !validCategoryIds.includes(formData.category)) {
 
     if (!validateForm()) return
 
+    const openingBalance = Number(formData.openingBalance || 0);
     const payload = {
       name: formData.name.trim(),
       code: formData.code.trim(),
       type: formData.type,
       category: formData.category,
-      openingBalance: Number(formData.openingBalance || 0),
+      openingBalance,
+      currentBalance: openingBalance,
       currency: formData.currency,
       description: formData.description.trim() || '',
     }

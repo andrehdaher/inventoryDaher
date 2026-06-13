@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 
 export default function Exchange() {
 
-    const [isOpen, setIsOpen] = useState(false)
+    const [openExchangeId, setOpenExchangeId] = useState<string | null>(null)
     const [amountFinal, setAmountFinal] = useState(0)
     const [finalRate, setFinalRate] = useState(0)
     const queryClient = useQueryClient();
@@ -56,7 +56,7 @@ export default function Exchange() {
             toast.success("تم إضافة الدفعة بنجاح!");
             setAmountFinal(0);
             setFinalRate(0);
-            setIsOpen(false)
+            setOpenExchangeId(null)
             queryClient.invalidateQueries({ queryKey: ['exchange-table'] });
             queryClient.invalidateQueries({ queryKey: ['doneExchange-table'] });
         },
@@ -89,11 +89,12 @@ export default function Exchange() {
                 title='عمليات بحاجة الى تحويل'
                 data={exchange ? exchange : []}
                 columns={exchangeColumns}
+                isLoading={exchangeLoading}
                 renderRowActions={row => { return (
                     <PopupForm
                         title='انهاء عملية التحويل'
-                        isOpen={isOpen}
-                        setIsOpen={setIsOpen}
+                        isOpen={openExchangeId === row.id}
+                        setIsOpen={(open) => setOpenExchangeId(open ? row.id : null)}
                         trigger={
                             <Button>
                                 تحويل
@@ -134,6 +135,7 @@ export default function Exchange() {
                 title='عمليات التحويل المنتهية'
                 data={doneExchange ? doneExchange : []}
                 columns={doneExchangeColumns}
+                isLoading={doneExchangeLoading}
             />
         </DashboardLayout>
     )

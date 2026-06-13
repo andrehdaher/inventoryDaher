@@ -19,6 +19,7 @@ export interface ProductTableRow {
   name: string;
   quantity: number;
   warehouse: string;
+  payPrice?: number;
   sellPrice: number;
   category: string;
   unit: string;
@@ -89,8 +90,9 @@ export default function Products() {
     priceRange,
   ]);
 
-  const totalProductsBalance = filteredData?.reduce(
-    (sum, d: ProductTableRow & { payPrice: number }) => sum + ((d.payPrice || 1) * (d.quantity || 1)),
+  const totalProductsBalance = filteredData.reduce(
+    (sum, product) =>
+      sum + Number(product.payPrice || 0) * Number(product.quantity || 0),
     0,
   );
 

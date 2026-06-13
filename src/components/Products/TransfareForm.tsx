@@ -48,6 +48,7 @@ export default function TransferForm({
   const [partValue, setPartValue] = useState(0);
   const [expenseAccountId, setExpenseAccountId] = useState("");
   const [paymentAccountId, setPaymentAccountId] = useState("");
+  const [payableAccountId, setPayableAccountId] = useState("");
 
   const {
     control,
@@ -86,6 +87,9 @@ export default function TransferForm({
     });
     setExpenseAccountId("");
     setPaymentAccountId("");
+    setPayableAccountId("");
+    setIsDebt("cash");
+    setPartValue(0);
   }, [row, reset]);
 
   const warehouseTransfare = useMutation({
@@ -100,8 +104,11 @@ export default function TransferForm({
       quantity: number;
       note: string;
       newSellPrice?: number;
+      paymentStatus?: "cash" | "debt" | "part";
+      partValue?: number;
       expenseAccountId?: string;
       paymentAccountId?: string;
+      payableAccountId?: string;
     }) => handleWarehouseTransfare(transferData),
     onSuccess: () => {
       setIsOpen(false);
@@ -120,12 +127,12 @@ export default function TransferForm({
       return;
     }
 
-    if (isDebt === "part" && partValue <= 0) {
+    if (values.amount > 0 && isDebt === "part" && partValue <= 0) {
       toast.error("الرجاء إدخال قيمة الدفعة الجزئية");
       return;
     }
 
-    if (isDebt === "part" && partValue >= values.amount) {
+    if (values.amount > 0 && isDebt === "part" && partValue >= values.amount) {
       toast.error("قيمة الدفعة الجزئية يجب أن تكون أقل من المبلغ الكلي");
       return;
     }
@@ -135,8 +142,13 @@ export default function TransferForm({
       return;
     }
 
-    if (values.amount > 0 && !paymentAccountId) {
+    if (values.amount > 0 && (isDebt === "cash" || isDebt === "part") && !paymentAccountId) {
       toast.error("الرجاء اختيار حساب الدفع");
+      return;
+    }
+
+    if (values.amount > 0 && (isDebt === "debt" || isDebt === "part") && !payableAccountId) {
+      toast.error("الرجاء اختيار حساب الموردين");
       return;
     }
 
@@ -154,8 +166,13 @@ export default function TransferForm({
       quantity: values.quantity,
       note: values.note || "",
       newSellPrice: values.sellPrice,
+      paymentStatus: values.amount > 0 ? isDebt : "cash",
+      partValue: isDebt === "part" ? partValue : 0,
       expenseAccountId: values.amount > 0 ? expenseAccountId : undefined,
-      paymentAccountId: values.amount > 0 ? paymentAccountId : undefined,
+      paymentAccountId:
+        values.amount > 0 && isDebt !== "debt" ? paymentAccountId : undefined,
+      payableAccountId:
+        values.amount > 0 && isDebt !== "cash" ? payableAccountId : undefined,
     });
   };
 
@@ -299,12 +316,22 @@ export default function TransferForm({
                 onChange={setExpenseAccountId}
                 filterType="expense"
               />
-              <AccountSelect
-                label="حساب الدفع"
-                value={paymentAccountId}
-                onChange={setPaymentAccountId}
-                filterType="payment"
-              />
+              {(isDebt === "cash" || isDebt === "part") && (
+                <AccountSelect
+                  label="حساب الدفع"
+                  value={paymentAccountId}
+                  onChange={setPaymentAccountId}
+                  filterType="payment"
+                />
+              )}
+              {(isDebt === "debt" || isDebt === "part") && (
+                <AccountSelect
+                  label="حساب الموردين"
+                  value={payableAccountId}
+                  onChange={setPayableAccountId}
+                  filterType="payable"
+                />
+              )}
             </>
           )}
 

@@ -91,8 +91,8 @@ export default function Warehouses() {
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {filteredWarehouses.map((warehouse) => (
                   <Card
-                    onDoubleClick={() => navigate(`/warehouses/${warehouse.name}`)}
-                    key={warehouse.name}
+                    onDoubleClick={() => navigate(`/warehouses/${warehouse.id}`)}
+                    key={warehouse.id}
                     className="group relative overflow-hidden transition-all hover:-translate-y-1 hover:shadow-lg"
                   >
                     <CardHeader className="flex flex-row items-start justify-between gap-2">
@@ -112,7 +112,7 @@ export default function Warehouses() {
                         {/* View Details */}
                         <button
                           onClick={() =>
-                            navigate(`/warehouses/${warehouse.name}`)
+                            navigate(`/warehouses/${warehouse.id}`)
                           }
                           className="rounded-md p-1 text-muted-foreground transition hover:bg-muted hover:text-primary"
                           title="عرض التفاصيل"

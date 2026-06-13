@@ -92,7 +92,7 @@ export default function UpdateAccountForm({ account, onClose }: UpdateAccountFor
             code: formData.code.trim(),
             type: formData.type,
             category: formData.category,
-            balance: Number(formData.openingBalance || 0),
+            currentBalance: Number(formData.openingBalance || 0),
             currency: formData.currency,
             description: formData.description.trim() || '',
         }

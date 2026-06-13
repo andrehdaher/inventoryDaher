@@ -21,7 +21,7 @@ import ProductsDataTable from "@/components/Products/ProductsDataTable";
 export default function WarehousesDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { data: warehouses = [] } = useWarehouseContext();
+  const { data: warehouses = [], isLoading: warehousesLoading } = useWarehouseContext();
   
   const [openTransfare, setOpenTransfare] = useState(false);
   const [productRow, setProductRow] = useState({});
@@ -29,12 +29,16 @@ export default function WarehousesDetails() {
   const [openForm, setOpenForm] = useState(false);
   const [editRow, setEditRow] = useState<any | null>(null);
 
-  const warehouse = warehouses.find((w) => String(w.id) === id);
+  const routeWarehouse = decodeURIComponent(id || "");
+  const warehouse = warehouses.find(
+    (w) => String(w.id) === routeWarehouse || String(w.name) === routeWarehouse,
+  );
+  const warehouseName = warehouse?.name || routeWarehouse;
 
   const { data: sales = [], isLoading } = useQuery({
-    queryKey: ["sales", id],
-    queryFn: () => getSalesByWarehouseAndDate(id),
-    enabled: !!id,
+    queryKey: ["sales", warehouseName],
+    queryFn: () => getSalesByWarehouseAndDate(warehouseName),
+    enabled: !!warehouseName && !!warehouse,
   });
 
   const totalTodaySales = useMemo(() => {
@@ -47,13 +51,20 @@ export default function WarehousesDetails() {
   }, [sales]);
 
   const { data: products, isLoading: productsLoading } = useQuery({
-    queryKey: ["products-table", id],
-    queryFn: () => getByWarehouse(id!),
-    enabled: !!id,
+    queryKey: ["products-table", warehouseName],
+    queryFn: () => getByWarehouse(warehouseName),
+    enabled: !!warehouseName && !!warehouse,
   });
 
+  if (warehousesLoading) {
+    return (
+      <DashboardLayout>
+        <Loading />
+      </DashboardLayout>
+    );
+  }
 
-  if (warehouse) {
+  if (!warehouse) {
     return (
       <DashboardLayout>
         <div className="flex flex-col items-center justify-center h-[300px] gap-3">
@@ -83,7 +94,7 @@ export default function WarehousesDetails() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Warehouse size={22} />
-            {id}
+            {warehouse.name}
           </h1>
           <p className="text-sm text-muted-foreground">تفاصيل المستودع</p>
         </div>

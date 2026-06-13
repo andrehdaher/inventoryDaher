@@ -110,6 +110,9 @@ export default function SupplierDetails() {
       queryClient.invalidateQueries({
         queryKey: ["supplier-details"],
       });
+      queryClient.invalidateQueries({
+        queryKey: ["products-table"],
+      });
     },
     onError: (error) => {
       console.error(error);
@@ -176,15 +179,27 @@ export default function SupplierDetails() {
     }
 
     try {
+      const returnQty = Number(returnAmount);
+
+      if (!returnQty || returnQty <= 0) {
+        toast.error("الرجاء إدخال كمية إرجاع صحيحة");
+        return;
+      }
+
+      if (returnQty > Number(row.quantity || 0)) {
+        toast.error("كمية الإرجاع أكبر من الكمية المتوفرة في الفاتورة");
+        return;
+      }
+
       const payload = {
         productCode: row.code,
         productName: row.name,
         supplierName: supplier.name,
         supplierId: supplierId.id,
         warehouse: row.warehouse,
-        qty: -Number(returnAmount),
+        qty: returnQty,
         returnType: isDebt,
-        returnValue: Number(returnAmount) * row.payPrice,
+        returnValue: returnQty * row.payPrice,
         referenceId: row.id,
         productId: row.id,
         partValue,
