@@ -1,0 +1,1 @@
+import{E as r,e as n,A as s}from"./index-xMIjoaB_.js";async function t(){try{return(await r.get("/api/journal-entries")).data}catch(e){throw console.error("خطأ أثناء جلب القيود اليومية:",e),new Error("خطأ أثناء جلب القيود اليومية")}}const o=()=>n({queryKey:s.journalEntries,queryFn:async()=>t(),staleTime:1e3*60*5,refetchOnWindowFocus:!1});export{o as u};

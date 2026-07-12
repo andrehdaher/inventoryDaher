@@ -1,0 +1,1 @@
+const c=t=>{if(!t)return 0;if(!isNaN(Number(t)))return Number(t);const e=new Date(t);if(!isNaN(e.getTime()))return e.getTime();if(t.includes(",")&&t.includes("/")){const[r,i]=t.split(","),[s,n,m]=r.split(":").map(Number),[o,p,N]=i.split("/").map(Number);return new Date(N,p-1,o,s,n,m).getTime()}return 0};export{c as p};
