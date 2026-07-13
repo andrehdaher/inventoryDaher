@@ -93,6 +93,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
                 <DropdownMenuItem
                   onClick={() => {
                     localStorage.removeItem("InventoryUser");
+                    localStorage.removeItem("auth_token");
                     navigate("/login");
                   }}
                 >

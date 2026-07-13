@@ -26,9 +26,35 @@ import { Select } from "@radix-ui/react-select";
 import { PDFDownloadLink } from "@react-pdf/renderer";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, FileText } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+
+const toNumber = (value: unknown) => {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : 0;
+};
+
+const formatAmount = (value: unknown) =>
+  toNumber(value).toLocaleString("en-US", {
+    maximumFractionDigits: 2,
+  });
+
+const getPaymentStatusLabel = (status?: string) => {
+  if (status === "cash") return "نقدي";
+  if (status === "part") return "جزئي";
+  if (status === "debt") return "دين";
+  return "غير محدد";
+};
+
+const getPaymentMovementLabel = (payment: any) => {
+  const note = String(payment?.note || "");
+
+  if (note.includes("كامل")) return "دفعة بيع نقدي";
+  if (note.includes("دفعة من ثمن بيع")) return "دفعة بيع جزئي";
+  if (toNumber(payment?.amount) < 0) return "دفعة للزبون";
+  return "تحصيل دين";
+};
 
 export default function CustomerDetails() {
   const navigate = useNavigate();
@@ -113,17 +139,89 @@ export default function CustomerDetails() {
 
   const paymentsColumns = [
     { label: "المعرف", key: "id", hidden: true },
-    { label: "المبلغ", key: "amount" },
+    { label: "نوع الحركة", key: "movementLabel" },
+    { label: "المبلغ", key: "amountDisplay" },
+    { label: "العملة", key: "currency" },
     { label: "الوصف", key: "note" },
     { label: "التاريخ", key: "date" },
   ];
 
   const purchasesColumns = [
     { label: "المعرف", key: "id", hidden: true },
-    { label: "السعر النهائي", key: "totalPrice" },
+    { label: "طريقة الدفع", key: "status" },
+    { label: "الإجمالي", key: "totalPriceDisplay" },
+    { label: "المدفوع", key: "paidAmountDisplay" },
+    { label: "المتبقي", key: "remainingDebtDisplay" },
+    { label: "العملة", key: "currency" },
     { label: "المنتجات", key: "productsString" },
     { label: "التاريخ", key: "date" },
   ];
+
+  const customerSales = useMemo(
+    () =>
+      data
+        ? (data.data.purchases || [])
+            .filter(
+              (purchase) =>
+                Array.isArray(purchase.products) &&
+                purchase.products.length > 0,
+            )
+            .map((purchase) => {
+              const totalPrice = toNumber(purchase.totalPrice);
+              const remainingDebt = toNumber(purchase.remainingDebt);
+              const paidAmount =
+                purchase.paidAmount !== undefined
+                  ? toNumber(purchase.paidAmount)
+                  : Math.max(totalPrice - remainingDebt, 0);
+
+              return {
+                ...purchase,
+                status:
+                  purchase.paymentStatusLabel ||
+                  getPaymentStatusLabel(purchase.paymentStatus),
+                totalPriceDisplay: formatAmount(totalPrice),
+                paidAmount,
+                paidAmountDisplay: formatAmount(paidAmount),
+                remainingDebt,
+                remainingDebtDisplay: formatAmount(remainingDebt),
+                currency: purchase.currency || "-",
+                productsString:
+                  purchase.productsString ||
+                  purchase.products
+                    .map((p) => `${p.name} (${toNumber(p.qty)})`)
+                    .join(", "),
+              };
+            })
+            .sort((a, b) => parseDate(b.date) - parseDate(a.date))
+        : [],
+    [data],
+  );
+
+  const customerPayments = useMemo(
+    () =>
+      [...(data?.data.payments ?? [])]
+        .map((payment) => ({
+          ...payment,
+          movementLabel: getPaymentMovementLabel(payment),
+          amountDisplay: formatAmount(payment.amount),
+          currency: payment.currency || "-",
+        }))
+        .sort((a, b) => parseDate(b.date) - parseDate(a.date)),
+    [data],
+  );
+
+  const salesSummary = useMemo(
+    () => ({
+      cash: customerSales.filter((sale) => sale.paymentStatus === "cash").length,
+      part: customerSales.filter((sale) => sale.paymentStatus === "part").length,
+      debt: customerSales.filter((sale) => sale.paymentStatus === "debt").length,
+      remainingDebt: customerSales.reduce(
+        (sum, sale) => sum + toNumber(sale.remainingDebt),
+        0,
+      ),
+    }),
+    [customerSales],
+  );
 
   const operations: Operations[] = [
     ...(data?.data?.purchases
@@ -318,30 +416,35 @@ export default function CustomerDetails() {
               <DataTable
                 title="الدفعات"
                 columns={paymentsColumns}
-                data={[...(data?.data.payments ?? [])].sort(
-                  (a, b) => parseDate(b.date) - parseDate(a.date),
-                )}
+                data={customerPayments}
               />
+
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <div className="rounded-md border p-3">
+                  <p className="text-sm text-muted-foreground">فواتير نقدية</p>
+                  <p className="text-xl font-bold">{salesSummary.cash}</p>
+                </div>
+                <div className="rounded-md border p-3">
+                  <p className="text-sm text-muted-foreground">فواتير جزئية</p>
+                  <p className="text-xl font-bold">{salesSummary.part}</p>
+                </div>
+                <div className="rounded-md border p-3">
+                  <p className="text-sm text-muted-foreground">فواتير دين</p>
+                  <p className="text-xl font-bold">{salesSummary.debt}</p>
+                </div>
+                <div className="rounded-md border p-3">
+                  <p className="text-sm text-muted-foreground">إجمالي المتبقي</p>
+                  <p className="text-xl font-bold text-destructive">
+                    {formatAmount(salesSummary.remainingDebt)}
+                  </p>
+                </div>
+              </div>
+
               <DataTable
-                title="عمليات الشراء"
+                title="فواتير البيع"
+                description="يمكن تمييز الفاتورة من طريقة الدفع: نقدي، دين، أو جزئي، مع المدفوع والمتبقي لكل فاتورة."
                 columns={purchasesColumns}
-                data={
-                  data
-                    ? data.data.purchases
-                        .filter(
-                          (purchase) =>
-                            Array.isArray(purchase.products) &&
-                            purchase.products.length > 0,
-                        )
-                        .map((purchase) => ({
-                          ...purchase,
-                          productsString: purchase.products
-                            .map((p) => p.name)
-                            .join(", "),
-                        }))
-                        .sort((a, b) => parseDate(b.date) - parseDate(a.date))
-                    : []
-                }
+                data={customerSales}
                 renderRowActions={(row) => (
                   <div className="flex gap-2">
                     <Button

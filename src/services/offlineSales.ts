@@ -7,8 +7,7 @@ import {
   setOfflineCache,
   updatePendingSale,
 } from "@/lib/offlineStore";
-import { checkoutMyInvoiceDraft } from "@/services/invoiceDraft";
-import type { Product, sell } from "@/services/transaction";
+import { sellProducts, type Product, type sell } from "@/services/transaction";
 
 export const offlineCacheKeys = {
   products: "products-table",
@@ -83,7 +82,7 @@ export const syncPendingOfflineSales = async () => {
 
   for (const record of pendingSales) {
     try {
-      await checkoutMyInvoiceDraft(record.sale);
+      await sellProducts({ newSell: record.sale });
       await removePendingSale(record.id);
       synced += 1;
     } catch (error: any) {

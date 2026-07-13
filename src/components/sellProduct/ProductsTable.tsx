@@ -8,6 +8,11 @@ import { toast } from "sonner";
 
 type SelectedProduct = Product & { qty: number };
 
+const toNumber = (value: unknown) => {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : 0;
+};
+
 interface ProductsTableProps {
   products: Product[];
   selectedProducts?: SelectedProduct[];
@@ -67,20 +72,35 @@ const ProductsTable: React.FC<ProductsTableProps> = ({
   );
 
   const updateQty = (id: string, qty: number) => {
-    if (qty > products.find((p) => p.id === id)?.quantity!) {
+    const nextQty = toNumber(qty);
+    const availableQuantity = toNumber(
+      products.find((p) => p.id === id)?.quantity,
+    );
+
+    if (nextQty <= 0) {
+      toast.error("الكمية يجب أن تكون أكبر من صفر");
+      return;
+    }
+
+    if (nextQty > availableQuantity) {
       toast.error("الكمية المطلوبة غير متوفرة في المخزون");
       return;
     }
 
     commitSelectedProducts((current) => {
       const newSelected = current
-        .map((p) => (p.id === id ? { ...p, qty } : p))
-        .filter((p) => p.qty >= 0);
+        .map((p) => (p.id === id ? { ...p, qty: nextQty } : p))
+        .filter((p) => p.qty > 0);
       return newSelected;
     });
   };
 
   const addProduct = (product: Product) => {
+    if (toNumber(product.quantity) <= 0) {
+      toast.error("الكمية المطلوبة غير متوفرة في المخزون");
+      return;
+    }
+
     commitSelectedProducts((current) => {
       const exists = current.find((p) => p.id === product.id);
 
@@ -120,10 +140,17 @@ const ProductsTable: React.FC<ProductsTableProps> = ({
   };
 
   const updatePrice = (id: string, price: number) => {
+    const nextPrice = toNumber(price);
+
+    if (nextPrice <= 0) {
+      toast.error("سعر البيع يجب أن يكون أكبر من صفر");
+      return;
+    }
+
     commitSelectedProducts((current) =>
       current
-        .map((p) => (p.id === id ? { ...p, sellPrice: price } : p))
-        .filter((p) => p.qty >= 0),
+        .map((p) => (p.id === id ? { ...p, sellPrice: nextPrice } : p))
+        .filter((p) => p.qty > 0),
     );
   };
 

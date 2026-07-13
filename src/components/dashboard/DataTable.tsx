@@ -113,12 +113,15 @@ export function DataTable({
 
   const renderCellContent = (value: any, key: string) => {
     if (key === "status") {
+      const successStatuses = ["completed", "تم التسديد", "نقدي", "مسدد"];
+      const warningStatuses = ["جاري التسديد", "جزئي", "مدفوع جزئيا"];
+
       return (
         <Badge
           variant={
-            value == "completed" || value == "تم التسديد"
+            successStatuses.includes(value)
               ? "default"
-              : value == "جاري التسديد"
+              : warningStatuses.includes(value)
                 ? "secondary"
                 : "destructive"
           }

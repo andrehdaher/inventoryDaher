@@ -17,17 +17,34 @@ import {
 import { useInvoiceDraftSync } from "@/hooks/useInvoiceDraftSync";
 import { useOfflineSalesSync } from "@/hooks/useOfflineSalesSync";
 import getAllCustomer from "@/services/customer";
-import {
-  checkoutMyInvoiceDraft,
-  InvoicePaymentStatus,
-} from "@/services/invoiceDraft";
+import { InvoicePaymentStatus } from "@/services/invoiceDraft";
 import { enqueueOfflineSale } from "@/services/offlineSales";
 import getAllProducts from "@/services/products";
-import { sell } from "@/services/transaction";
+import { sell, sellProducts } from "@/services/transaction";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, Wifi, WifiOff } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+
+const toNumber = (value: unknown) => {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : 0;
+};
+
+const getRequestErrorMessage = (error: unknown) => {
+  const responseData = (error as any)?.response?.data;
+
+  if (typeof responseData === "string") {
+    return responseData;
+  }
+
+  return (
+    responseData?.message ||
+    responseData?.error ||
+    (error as Error)?.message ||
+    "حدث خطأ أثناء إنشاء الفاتورة"
+  );
+};
 
 export default function SellProduct() {
   const [isOpen, setIsOpen] = useState(false);
@@ -77,7 +94,7 @@ export default function SellProduct() {
   );
 
   const sellProductMutation = useMutation({
-    mutationFn: (dataToSend: sell) => checkoutMyInvoiceDraft(dataToSend),
+    mutationFn: (dataToSend: sell) => sellProducts({ newSell: dataToSend }),
     onSuccess: async () => {
       toast.success("تم إنشاء الفاتورة بنجاح");
       await clearDraft();
@@ -86,7 +103,11 @@ export default function SellProduct() {
       queryClient.invalidateQueries({ queryKey: ["products-table"] });
     },
     onError: async (error, dataToSend) => {
-      console.error(error);
+      console.error("Sell invoice error:", {
+        error,
+        response: (error as any)?.response?.data,
+        sale: dataToSend,
+      });
 
       if (!isOnline || !(error as any)?.response) {
         await enqueueOfflineSale(dataToSend);
@@ -97,7 +118,7 @@ export default function SellProduct() {
         return;
       }
 
-      toast.error("حدث خطأ أثناء إنشاء الفاتورة");
+      toast.error(getRequestErrorMessage(error));
     },
   });
 
@@ -183,23 +204,54 @@ export default function SellProduct() {
       return;
     }
 
+    if (!Number.isFinite(finalAmount) || finalAmount <= 0) {
+      toast.error("قيمة الفاتورة يجب أن تكون أكبر من صفر");
+      return;
+    }
+
+    if (
+      selectedProducts.some(
+        (product) =>
+          toNumber(product.qty) <= 0 || toNumber(product.sellPrice) <= 0,
+      )
+    ) {
+      toast.error("كل الكميات وأسعار البيع يجب أن تكون أكبر من صفر");
+      return;
+    }
+
     if (!validateAccounts()) {
       return;
     }
+
+    const saleCurrency = paymentStatus === "debt" ? currency || "USD" : currency;
+    const saleExchangeRate = saleCurrency === "USD" ? 1 : toNumber(exchangeRate);
 
     const paidAmount =
       paymentStatus === "cash"
         ? finalAmount
         : paymentStatus === "part"
-          ? currency === "USD"
-            ? Number(partValue)
-            : Number((Number(partValue) / exchangeRate).toFixed(1))
+          ? saleCurrency === "USD"
+            ? toNumber(partValue)
+            : Number((toNumber(partValue) / saleExchangeRate).toFixed(3))
           : 0;
+
+    if (paymentStatus === "part" && paidAmount >= finalAmount) {
+      toast.error("الدفعة الجزئية يجب أن تكون أقل من إجمالي الفاتورة");
+      return;
+    }
 
     const saleData: sell = {
       customerId: draft.customerId,
       totalPrice: finalAmount,
-      products: selectedProducts,
+      products: selectedProducts.map((product) => ({
+        ...product,
+        quantity:
+          product.quantity === undefined ? undefined : toNumber(product.quantity),
+        qty: toNumber(product.qty),
+        sellPrice: toNumber(product.sellPrice),
+        payPrice:
+          product.payPrice === undefined ? undefined : toNumber(product.payPrice),
+      })),
       paymentStatus,
       remainingDebt: paymentStatus === "cash" ? 0 : finalAmount - paidAmount,
       paymentAccountId:
@@ -207,10 +259,10 @@ export default function SellProduct() {
       receivableAccountId:
         paymentStatus === "cash" ? undefined : receivableAccountId,
       salesAccountId,
-      currency,
-      exchangeRate,
-      amount_base: finalAmount * exchangeRate,
-      partValue: Number(partValue || 0),
+      currency: saleCurrency,
+      exchangeRate: saleExchangeRate,
+      amount_base: finalAmount * saleExchangeRate,
+      partValue: toNumber(partValue),
     };
 
     if (!isOnline) {

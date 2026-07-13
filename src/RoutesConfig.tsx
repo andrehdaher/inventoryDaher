@@ -1,5 +1,6 @@
 import React from "react";
 import { PrivateRoute } from "@/components/auth/PrivateRoute";
+import type { AppPermission } from "@/config/permissions";
 
 // Lazy Loading للصفحات
 const Products = React.lazy(() => import("@/pages/Products"));
@@ -31,45 +32,53 @@ const IncomeStatement = React.lazy(()=> import('@/pages/IncomeStatement'))
 const ProfitAnalysis = React.lazy(()=> import('@/pages/ProfitAnalysis'))
 const InventoryBalances = React.lazy(()=> import('@/pages/InventoryBalances'))
 const Purchases =React.lazy(()=> import('@/pages/Purchases'))
+const Users = React.lazy(() => import("@/pages/Users"));
 //   const AskAi = React.lazy(() => import('@/pages/AskAi'))
 // import AiReports from "@/pages/AiReports";
 
-const protect = (element: JSX.Element, allowedRoles = ["admin"]) => (
-  <PrivateRoute allowedRoles={allowedRoles}>{element}</PrivateRoute>
+const protect = (
+  element: JSX.Element,
+  allowedRoles = ["admin"],
+  permission?: AppPermission,
+) => (
+  <PrivateRoute allowedRoles={allowedRoles} permission={permission}>
+    {element}
+  </PrivateRoute>
 );
 
 export const routesConfig = [
   { path: "/", element: <Login /> },
   { path: "/login", element: <Login /> },
-  { path: "/home", element: protect(<Home />, ["admin", "user"]) },
+  { path: "/home", element: protect(<Home />, ["admin", "user"], "home") },
   { path: "/signUp", element: <SignUp /> },
   { path: "/unauthorized", element: <UnauthorizedPage /> },
-  { path: "/Products", element: protect(<Products />, ["admin", "user"])},
-  { path: "/suppliers", element:  protect(<Suppliers />) },
-  { path: "/customers", element:  protect(<Customers />) },
-  { path: "/dashboard", element: protect(<Dashboard />, ["admin", "user"]) },
-  { path: "/sellProduct", element: protect(<SellProduct />) },
-  { path: "/financialStatement", element: protect(<FinancialStatement />) },
-  { path: "/SupplierDetails", element: protect(<SupplierDetails />) },
-  { path: "/CustomerDetails", element: protect(<CustomerDetails />) },
-  { path: "/productDetails", element: protect(<ProductDetails />, ["admin", "user"]) },
-  { path: "/sellDetails", element: protect(<SellDetails />) },
+  { path: "/Products", element: protect(<Products />, ["admin", "user"], "products")},
+  { path: "/suppliers", element:  protect(<Suppliers />, ["admin"], "suppliers") },
+  { path: "/customers", element:  protect(<Customers />, ["admin"], "customers") },
+  { path: "/dashboard", element: protect(<Dashboard />, ["admin", "user"], "dashboard") },
+  { path: "/sellProduct", element: protect(<SellProduct />, ["admin"], "sell-product") },
+  { path: "/financialStatement", element: protect(<FinancialStatement />, ["admin"], "financial-statement") },
+  { path: "/SupplierDetails", element: protect(<SupplierDetails />, ["admin"], "suppliers") },
+  { path: "/CustomerDetails", element: protect(<CustomerDetails />, ["admin"], "customers") },
+  { path: "/productDetails", element: protect(<ProductDetails />, ["admin", "user"], "products") },
+  { path: "/sellDetails", element: protect(<SellDetails />, ["admin"], "sell-product") },
   { path: "/Exchange", element: protect(<Exchange />) },
-  { path: "/warehouses", element: protect(<Warehouses />) },
-  { path: "/warehouses/:id", element: protect(<WarehousesDetails />) },
-  { path: "/categories", element: protect(<Categories />) },
-  { path: "/categories/:id", element: protect(<CategoryDetails />) },
-  { path: "/accounts", element: protect(<ChartAccount />) },
-  {path : '/accounts/:id' , element: protect(<ChartAccountDetails />)},
-  { path: "/journal-entries", element: protect(<JournalEntries />) },
-  { path: "/trial-balance", element: protect(<TrialBalance />) },
-  { path: "/general-ledger", element: protect(<GeneralLedger />) },
-  { path: "/general-ledger/:id", element: protect(<GeneralLedger />) },
-  { path: "/income-statement", element: protect(<IncomeStatement />) },
-  { path: "/profit-analysis", element: protect(<ProfitAnalysis />) },
-  { path: "/inventory-balances", element: protect(<InventoryBalances />) },
+  { path: "/warehouses", element: protect(<Warehouses />, ["admin"], "warehouses") },
+  { path: "/warehouses/:id", element: protect(<WarehousesDetails />, ["admin"], "warehouses") },
+  { path: "/categories", element: protect(<Categories />, ["admin"], "categories") },
+  { path: "/categories/:id", element: protect(<CategoryDetails />, ["admin"], "categories") },
+  { path: "/accounts", element: protect(<ChartAccount />, ["admin"], "accounts") },
+  {path : '/accounts/:id' , element: protect(<ChartAccountDetails />, ["admin"], "accounts")},
+  { path: "/journal-entries", element: protect(<JournalEntries />, ["admin"], "journal-entries") },
+  { path: "/trial-balance", element: protect(<TrialBalance />, ["admin"], "trial-balance") },
+  { path: "/general-ledger", element: protect(<GeneralLedger />, ["admin"], "general-ledger") },
+  { path: "/general-ledger/:id", element: protect(<GeneralLedger />, ["admin"], "general-ledger") },
+  { path: "/income-statement", element: protect(<IncomeStatement />, ["admin"], "income-statement") },
+  { path: "/profit-analysis", element: protect(<ProfitAnalysis />, ["admin"], "profit-analysis") },
+  { path: "/inventory-balances", element: protect(<InventoryBalances />, ["admin"], "inventory-balances") },
   // { path: "/ai-reports", element: <AiReports /> },
   // { path: "/ai-chat", element: <AskAi /> },
-  {path: '/purchases' , element: protect(<Purchases />)},
+  {path: '/purchases' , element: protect(<Purchases />, ["admin"], "purchases")},
+  { path: "/users", element: protect(<Users />) },
   { path: "*", element: <NotFound /> }
 ];
