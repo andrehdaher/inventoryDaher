@@ -16,6 +16,7 @@ export interface sell {
     name: string;
     warehouse: string;
     quantity?: number;
+    reservedQuantity?: number;
     qty: number;
     sellPrice: number;
     unit?: string;
@@ -30,6 +31,7 @@ export interface sell {
   exchangeRate: number;
   amount_base: number;
   partValue: number;
+  discount?: number;
 }
 
 export interface returnData {
@@ -61,6 +63,7 @@ export interface Product {
   sellPrice: number;
   unit: string;
   quantity: number;
+  reservedQuantity?: number;
   alertQuantity?: number;
   warehouse: string;
   updatedDate: string;
@@ -176,6 +179,7 @@ export async function endExchange({
 
 export async function payCustomerDebt(dataToSend: {
   customerId: string;
+  sellId?: string;
   amount: number;
   note: string;
   currency: string;
@@ -188,6 +192,7 @@ export async function payCustomerDebt(dataToSend: {
     const response = await apiClient.post("/api/transactions/customerPayment", {
       paymentData: {
         customerId: dataToSend.customerId,
+        sellId: dataToSend.sellId,
         amount: Number(dataToSend.amount),
         note: dataToSend.note,
         currency: dataToSend.currency,

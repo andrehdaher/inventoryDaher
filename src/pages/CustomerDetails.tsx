@@ -50,6 +50,7 @@ const getPaymentStatusLabel = (status?: string) => {
 const getPaymentMovementLabel = (payment: any) => {
   const note = String(payment?.note || "");
 
+  if (payment?.sellId && payment?.type === "income") return "تسديد فاتورة";
   if (note.includes("كامل")) return "دفعة بيع نقدي";
   if (note.includes("دفعة من ثمن بيع")) return "دفعة بيع جزئي";
   if (toNumber(payment?.amount) < 0) return "دفعة للزبون";
@@ -77,6 +78,11 @@ export default function CustomerDetails() {
   const [paymentAccountId, setPaymentAccountId] = useState("");
   const [receivableAccountId, setReceivableAccountId] = useState("");
   const [salesAccountId, setSalesAccountId] = useState("");
+  const [invoicePaymentOpenId, setInvoicePaymentOpenId] = useState<string | null>(null);
+  const [invoicePaymentAmount, setInvoicePaymentAmount] = useState(0);
+  const [invoicePaymentNote, setInvoicePaymentNote] = useState("");
+  const [invoicePaymentCurrency, setInvoicePaymentCurrency] = useState("USD");
+  const [invoicePaymentExchangeRate, setInvoicePaymentExchangeRate] = useState(1);
 
   const payCustomerDebtMutation = useMutation({
     mutationFn: (dataToSend: any) => payCustomerDebt(dataToSend as any),
@@ -84,6 +90,11 @@ export default function CustomerDetails() {
       toast.success("تم إضافة الدفعة بنجاح!");
       setAmount(0);
       setNote("");
+      setInvoicePaymentOpenId(null);
+      setInvoicePaymentAmount(0);
+      setInvoicePaymentNote("");
+      setInvoicePaymentCurrency("USD");
+      setInvoicePaymentExchangeRate(1);
       setCurrency("");
       setExchangeRate(1);
       setIsOpen(false);
@@ -140,6 +151,7 @@ export default function CustomerDetails() {
   const paymentsColumns = [
     { label: "المعرف", key: "id", hidden: true },
     { label: "نوع الحركة", key: "movementLabel" },
+    { label: "الفاتورة", key: "invoiceReference" },
     { label: "المبلغ", key: "amountDisplay" },
     { label: "العملة", key: "currency" },
     { label: "الوصف", key: "note" },
@@ -152,6 +164,7 @@ export default function CustomerDetails() {
     { label: "الإجمالي", key: "totalPriceDisplay" },
     { label: "المدفوع", key: "paidAmountDisplay" },
     { label: "المتبقي", key: "remainingDebtDisplay" },
+    { label: "دفعات الفاتورة", key: "invoicePaymentsDisplay" },
     { label: "العملة", key: "currency" },
     { label: "المنتجات", key: "productsString" },
     { label: "التاريخ", key: "date" },
@@ -169,10 +182,25 @@ export default function CustomerDetails() {
             .map((purchase) => {
               const totalPrice = toNumber(purchase.totalPrice);
               const remainingDebt = toNumber(purchase.remainingDebt);
+              const invoicePayments = Array.isArray(purchase.invoicePayments)
+                ? purchase.invoicePayments
+                : [];
               const paidAmount =
                 purchase.paidAmount !== undefined
                   ? toNumber(purchase.paidAmount)
                   : Math.max(totalPrice - remainingDebt, 0);
+              const invoicePaymentsDisplay = invoicePayments.length
+                ? invoicePayments
+                    .map(
+                      (payment) =>
+                        `${formatAmount(payment.amount)} - ${
+                          payment.date
+                            ? new Date(payment.date).toLocaleDateString("en-GB")
+                            : ""
+                        }`,
+                    )
+                    .join(" | ")
+                : "-";
 
               return {
                 ...purchase,
@@ -184,6 +212,7 @@ export default function CustomerDetails() {
                 paidAmountDisplay: formatAmount(paidAmount),
                 remainingDebt,
                 remainingDebtDisplay: formatAmount(remainingDebt),
+                invoicePaymentsDisplay,
                 currency: purchase.currency || "-",
                 productsString:
                   purchase.productsString ||
@@ -203,6 +232,9 @@ export default function CustomerDetails() {
         .map((payment) => ({
           ...payment,
           movementLabel: getPaymentMovementLabel(payment),
+          invoiceReference: payment.sellId
+            ? `فاتورة ${String(payment.sellId).slice(0, 8)}`
+            : "-",
           amountDisplay: formatAmount(payment.amount),
           currency: payment.currency || "-",
         }))
@@ -243,6 +275,82 @@ export default function CustomerDetails() {
   operations.sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
   );
+
+  const getCurrentCustomerId = () =>
+    String(customer?.id || customerId?.id || customerId || "");
+
+  const openInvoicePayment = (sale: any) => {
+    const nextCurrency = sale.currency || "USD";
+    const nextExchangeRate =
+      nextCurrency === "USD" ? 1 : toNumber(sale.exchangeRate) || 1;
+    const remainingDebt = toNumber(sale.remainingDebt);
+
+    setInvoicePaymentOpenId(sale.id);
+    setInvoicePaymentAmount(
+      nextCurrency === "USD"
+        ? remainingDebt
+        : Number((remainingDebt * nextExchangeRate).toFixed(3)),
+    );
+    setInvoicePaymentNote(`تسديد فاتورة ${String(sale.id).slice(0, 8)}`);
+    setInvoicePaymentCurrency(nextCurrency);
+    setInvoicePaymentExchangeRate(nextExchangeRate);
+    setPaymentAccountId(customer.defaultPaymentAccountId || paymentAccountId);
+    setReceivableAccountId(
+      customer.defaultReceivableAccountId || receivableAccountId,
+    );
+  };
+
+  const submitInvoicePayment = (sale: any) => {
+    const remainingDebt = toNumber(sale.remainingDebt);
+    const amountInBaseCurrency =
+      invoicePaymentCurrency === "USD"
+        ? invoicePaymentAmount
+        : Number((invoicePaymentAmount / invoicePaymentExchangeRate).toFixed(3));
+
+    if (remainingDebt <= 0) {
+      toast.error("هذه الفاتورة مسددة بالكامل");
+      return;
+    }
+
+    if (amountInBaseCurrency <= 0 || amountInBaseCurrency > remainingDebt) {
+      toast.error("قيمة الدفعة يجب أن تكون أكبر من صفر ولا تتجاوز المتبقي");
+      return;
+    }
+
+    if (!paymentAccountId || !receivableAccountId) {
+      toast.error("الرجاء اختيار حساب القبض وحساب العملاء");
+      return;
+    }
+
+    if (
+      invoicePaymentCurrency !== "USD" &&
+      invoicePaymentExchangeRate <= 0
+    ) {
+      toast.error("الرجاء إدخال سعر صرف صحيح");
+      return;
+    }
+
+    payCustomerDebtMutation.mutate({
+      customerId: getCurrentCustomerId(),
+      sellId: sale.id,
+      amount: amountInBaseCurrency,
+      note: invoicePaymentNote || `تسديد فاتورة ${String(sale.id).slice(0, 8)}`,
+      currency: invoicePaymentCurrency,
+      exchangeRate: invoicePaymentExchangeRate,
+      amount_base: invoicePaymentAmount,
+      paymentAccountId,
+      receivableAccountId,
+    });
+  };
+
+  const getInvoicePaymentMaxAmount = (sale: any) =>
+    invoicePaymentCurrency === "USD"
+      ? toNumber(sale.remainingDebt)
+      : Number(
+          (
+            toNumber(sale.remainingDebt) * toNumber(invoicePaymentExchangeRate)
+          ).toFixed(3),
+        );
 
   return (
     <DashboardLayout>
@@ -455,6 +563,143 @@ export default function CustomerDetails() {
                     >
                       تفاصيل
                     </Button>
+
+                    <PopupForm
+                      title="تسديد فاتورة"
+                      isOpen={invoicePaymentOpenId === row.id}
+                      setIsOpen={(value) => {
+                        if (!value) {
+                          setInvoicePaymentOpenId(null);
+                          return;
+                        }
+
+                        openInvoicePayment(row);
+                      }}
+                      trigger={
+                        <Button
+                          type="button"
+                          variant="accent"
+                          disabled={toNumber(row.remainingDebt) <= 0}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openInvoicePayment(row);
+                          }}
+                        >
+                          تسديد
+                        </Button>
+                      }
+                    >
+                      <form
+                        className="space-y-4"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          submitInvoicePayment(row);
+                        }}
+                      >
+                        <div className="rounded-md border p-3 text-sm">
+                          <div className="flex justify-between">
+                            <span>إجمالي الفاتورة</span>
+                            <span>{formatAmount(row.totalPrice)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>المدفوع</span>
+                            <span>{formatAmount(row.paidAmount)}</span>
+                          </div>
+                          <div className="flex justify-between font-bold text-destructive">
+                            <span>المتبقي</span>
+                            <span>{formatAmount(row.remainingDebt)}</span>
+                          </div>
+                        </div>
+
+                        <FormInput
+                          label="قيمة الدفعة"
+                          id={`invoice-payment-${row.id}`}
+                          type="number"
+                          min={0}
+                          max={getInvoicePaymentMaxAmount(row)}
+                          value={invoicePaymentAmount}
+                          onChange={(event) =>
+                            setInvoicePaymentAmount(Number(event.target.value))
+                          }
+                        />
+
+                        <FormInput
+                          label="ملاحظات"
+                          id={`invoice-payment-note-${row.id}`}
+                          value={invoicePaymentNote}
+                          onChange={(event) =>
+                            setInvoicePaymentNote(event.target.value)
+                          }
+                        />
+
+                        <Select
+                          value={invoicePaymentCurrency}
+                          onValueChange={(nextCurrency) => {
+                            setInvoicePaymentCurrency(nextCurrency);
+                            setInvoicePaymentExchangeRate(
+                              nextCurrency === "USD"
+                                ? 1
+                                : invoicePaymentExchangeRate || 1,
+                            );
+                          }}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="العملة المدفوع بها" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {["SYP", "USD"].map((currencyOption) => (
+                              <SelectItem
+                                key={currencyOption}
+                                value={currencyOption}
+                              >
+                                {currencyOption}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+
+                        <FormInput
+                          id={`invoice-payment-exchange-${row.id}`}
+                          label="سعر الصرف"
+                          type="number"
+                          value={
+                            invoicePaymentCurrency === "USD"
+                              ? 1
+                              : invoicePaymentExchangeRate
+                          }
+                          disabled={invoicePaymentCurrency === "USD"}
+                          onChange={(event) =>
+                            setInvoicePaymentExchangeRate(
+                              Number(event.target.value),
+                            )
+                          }
+                        />
+
+                        <AccountSelect
+                          label="حساب القبض"
+                          value={paymentAccountId}
+                          onChange={setPaymentAccountId}
+                          filterType="payment"
+                        />
+
+                        <AccountSelect
+                          label="حساب العملاء"
+                          value={receivableAccountId}
+                          onChange={setReceivableAccountId}
+                          filterType="receivable"
+                        />
+
+                        <Button
+                          type="submit"
+                          className="w-full"
+                          disabled={payCustomerDebtMutation.isPending}
+                          loading={payCustomerDebtMutation.isPending}
+                        >
+                          تأكيد التسديد
+                        </Button>
+                      </form>
+                    </PopupForm>
+
                     <PopupForm
                       title={`إرجاع منتجات الفاتورة`}
                       isOpen={openReturnId === row.id}

@@ -18,6 +18,8 @@ export interface ProductTableRow {
   code: string;
   name: string;
   quantity: number;
+  reservedQuantity?: number;
+  availableQuantity?: number;
   warehouse: string;
   payPrice?: number;
   sellPrice: number;
@@ -79,6 +81,11 @@ export default function Products() {
 
     return rows.map((product) => ({
       ...product,
+      reservedQuantity: Number(product.reservedQuantity || 0),
+      availableQuantity: Math.max(
+        Number(product.quantity || 0) - Number(product.reservedQuantity || 0),
+        0,
+      ),
       alertQuantity: getProductAlertLimit(product),
     }));
   }, [

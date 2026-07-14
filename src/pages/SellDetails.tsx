@@ -28,6 +28,11 @@ import InvoicePdf from "@/components/pdf/InvoicePdf";
 import CustomerDiscountForm from "@/components/Customers/CustomerDiscountForm";
 import { toast } from "sonner";
 
+const toNumber = (value: unknown) => {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : 0;
+};
+
 export default function SellDetails() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -110,6 +115,20 @@ export default function SellDetails() {
     );
   }
 
+  const productsSubtotal = products.reduce(
+    (sum, product) =>
+      sum + toNumber(product?.sellPrice) * toNumber(product?.qty),
+    0,
+  );
+  const savedDiscount = toNumber(sell?.discount);
+  const inferredDiscount = Math.max(
+    productsSubtotal - toNumber(sell?.totalPrice),
+    0,
+  );
+  const invoiceDiscount =
+    savedDiscount > 0 ? savedDiscount : inferredDiscount;
+  const invoiceTotal = toNumber(sell?.totalPrice);
+
   return (
     <DashboardLayout>
       <div className="space-y-6 p-6 max-w-5xl mx-auto">
@@ -145,7 +164,9 @@ export default function SellDetails() {
               <PDFDownloadLink
                 document={
                   <PdfDocument>
-                    <InvoicePdf sell={{ ...sell, products }} />
+                    <InvoicePdf
+                      sell={{ ...sell, products, discount: invoiceDiscount }}
+                    />
                   </PdfDocument>
                 }
                 fileName={`فاتورة_${sell.customerName}_${sell.date}.pdf`}
@@ -332,13 +353,13 @@ export default function SellDetails() {
             <div className="flex justify-between">
               <span>المجموع:</span>
               <span className="font-medium">
-                {((sell?.totalPrice || 0) + (sell?.discount || 0)).toLocaleString()}
+                {productsSubtotal.toLocaleString()}
               </span>
             </div>
             <div className="flex justify-between">
               <span>الحسم:</span>
               <span className="font-medium">
-                {sell?.discount?.toLocaleString() || 0}{" "}
+                {invoiceDiscount.toLocaleString()}{" "}
               </span>
             </div>
             <div className="flex justify-between">
@@ -355,7 +376,7 @@ export default function SellDetails() {
                   sell.remainingDebt > 0 ? "text-red-600" : "text-green-600"
                 }
               >
-                {((sell?.totalPrice || 0) - (sell?.partValue || 0))?.toLocaleString()}
+                {(invoiceTotal - toNumber(sell?.partValue)).toLocaleString()}
               </span>
             </div>
           </CardContent>

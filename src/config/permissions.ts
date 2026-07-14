@@ -12,6 +12,7 @@ import {
   ScrollText,
   Shapes,
   ShoppingCart,
+  ClipboardCheck,
   TrendingUp,
   Truck,
   UserCog,
@@ -27,6 +28,7 @@ export type AppPermission =
   | "inventory-balances"
   | "purchases"
   | "sell-product"
+  | "material-reservations"
   | "suppliers"
   | "customers"
   | "financial-statement"
@@ -100,6 +102,13 @@ export const navigationGroups: NavigationItem[] = [
     icon: ShoppingCart,
     allowed: ["admin"],
     permission: "sell-product",
+  },
+  {
+    name: "Material Reservations",
+    href: "/material-reservations",
+    icon: ClipboardCheck,
+    allowed: ["admin"],
+    permission: "material-reservations",
   },
   {
     name: "Suppliers",

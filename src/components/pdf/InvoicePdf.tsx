@@ -1,6 +1,25 @@
 import { Text, View, StyleSheet } from "@react-pdf/renderer";
 
 export default function InvoicePdf({ sell }: { sell: any }) {
+  const toNumber = (value: unknown) => {
+    const numberValue = Number(value);
+    return Number.isFinite(numberValue) ? numberValue : 0;
+  };
+  const productsTotal = Array.isArray(sell?.products)
+    ? sell.products.reduce(
+        (sum: number, product: any) =>
+          sum + toNumber(product?.qty) * toNumber(product?.sellPrice),
+        0,
+      )
+    : 0;
+  const savedDiscount = toNumber(sell?.discount);
+  const inferredDiscount = Math.max(
+    productsTotal - toNumber(sell?.totalPrice),
+    0,
+  );
+  const discount = savedDiscount > 0 ? savedDiscount : inferredDiscount;
+  const totalPrice = toNumber(sell?.totalPrice);
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -60,21 +79,24 @@ export default function InvoicePdf({ sell }: { sell: any }) {
       </View>
 
       {/* Discount */}
-      {sell?.discount && sell?.discount > 0 && (
-        <View style={styles.totalContainer}>
-          <Text style={styles.totalLabel}>الحسم:</Text>
-          <Text style={styles.totalAmount}>
-            {sell?.discount?.toFixed(2) || "0.00"}
-          </Text>
-        </View>
+      {discount > 0 && (
+        <>
+          <View style={styles.totalContainer}>
+            <Text style={styles.totalLabel}>المجموع قبل الحسم:</Text>
+            <Text style={styles.totalAmount}>{productsTotal.toFixed(2)}</Text>
+          </View>
+
+          <View style={styles.totalContainer}>
+            <Text style={styles.totalLabel}>الحسم:</Text>
+            <Text style={styles.totalAmount}>{discount.toFixed(2)}</Text>
+          </View>
+        </>
       )}
 
       {/* Total */}
       <View style={styles.totalContainer}>
         <Text style={styles.totalLabel}>المجموع:</Text>
-        <Text style={styles.totalAmount}>
-          {sell?.totalPrice?.toFixed(2) || "0.00"}
-        </Text>
+        <Text style={styles.totalAmount}>{totalPrice.toFixed(2)}</Text>
       </View>
 
       {/* Footer */}

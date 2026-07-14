@@ -33,6 +33,7 @@ const ProfitAnalysis = React.lazy(()=> import('@/pages/ProfitAnalysis'))
 const InventoryBalances = React.lazy(()=> import('@/pages/InventoryBalances'))
 const Purchases =React.lazy(()=> import('@/pages/Purchases'))
 const Users = React.lazy(() => import("@/pages/Users"));
+const MaterialReservations = React.lazy(() => import("@/pages/MaterialReservations"));
 //   const AskAi = React.lazy(() => import('@/pages/AskAi'))
 // import AiReports from "@/pages/AiReports";
 
@@ -57,6 +58,7 @@ export const routesConfig = [
   { path: "/customers", element:  protect(<Customers />, ["admin"], "customers") },
   { path: "/dashboard", element: protect(<Dashboard />, ["admin", "user"], "dashboard") },
   { path: "/sellProduct", element: protect(<SellProduct />, ["admin"], "sell-product") },
+  { path: "/material-reservations", element: protect(<MaterialReservations />, ["admin"], "material-reservations") },
   { path: "/financialStatement", element: protect(<FinancialStatement />, ["admin"], "financial-statement") },
   { path: "/SupplierDetails", element: protect(<SupplierDetails />, ["admin"], "suppliers") },
   { path: "/CustomerDetails", element: protect(<CustomerDetails />, ["admin"], "customers") },

@@ -13,6 +13,12 @@ const toNumber = (value: unknown) => {
   return Number.isFinite(numberValue) ? numberValue : 0;
 };
 
+const getAvailableQuantity = (product?: Product) =>
+  Math.max(
+    toNumber(product?.quantity) - toNumber(product?.reservedQuantity),
+    0,
+  );
+
 interface ProductsTableProps {
   products: Product[];
   selectedProducts?: SelectedProduct[];
@@ -73,8 +79,8 @@ const ProductsTable: React.FC<ProductsTableProps> = ({
 
   const updateQty = (id: string, qty: number) => {
     const nextQty = toNumber(qty);
-    const availableQuantity = toNumber(
-      products.find((p) => p.id === id)?.quantity,
+    const availableQuantity = getAvailableQuantity(
+      products.find((p) => p.id === id),
     );
 
     if (nextQty <= 0) {
@@ -96,7 +102,9 @@ const ProductsTable: React.FC<ProductsTableProps> = ({
   };
 
   const addProduct = (product: Product) => {
-    if (toNumber(product.quantity) <= 0) {
+    const availableQuantity = getAvailableQuantity(product);
+
+    if (availableQuantity <= 0) {
       toast.error("الكمية المطلوبة غير متوفرة في المخزون");
       return;
     }
@@ -106,7 +114,7 @@ const ProductsTable: React.FC<ProductsTableProps> = ({
 
       if (exists) {
         const nextQty = exists.qty + 1;
-        if (nextQty > product.quantity) {
+        if (nextQty > availableQuantity) {
           toast.error("الكمية المطلوبة غير متوفرة في المخزون");
           return current;
         }
@@ -194,7 +202,7 @@ const ProductsTable: React.FC<ProductsTableProps> = ({
                 {p.name} ({p.code}) - ${p.sellPrice}
               </span>
               <span className="text-muted-foreground">
-                {p.warehouse} | المخزون: {p.quantity}
+                {p.warehouse} | المتاح: {getAvailableQuantity(p)}
               </span>
             </button>
           ))}

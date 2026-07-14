@@ -263,6 +263,7 @@ export default function SellProduct() {
       exchangeRate: saleExchangeRate,
       amount_base: finalAmount * saleExchangeRate,
       partValue: toNumber(partValue),
+      discount: toNumber(discount),
     };
 
     if (!isOnline) {
