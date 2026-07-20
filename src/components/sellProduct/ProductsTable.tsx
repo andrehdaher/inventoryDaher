@@ -24,6 +24,7 @@ interface ProductsTableProps {
   selectedProducts?: SelectedProduct[];
   onChange: (selected: SelectedProduct[]) => void;
   setAmount?: any;
+  enforceStock?: boolean;
 }
 
 const ProductsTable: React.FC<ProductsTableProps> = ({
@@ -31,6 +32,7 @@ const ProductsTable: React.FC<ProductsTableProps> = ({
   selectedProducts: controlledSelectedProducts,
   onChange,
   setAmount,
+  enforceStock = true,
 }) => {
   const [search, setSearch] = useState("");
   const [internalSelectedProducts, setInternalSelectedProducts] = useState<
@@ -88,7 +90,7 @@ const ProductsTable: React.FC<ProductsTableProps> = ({
       return;
     }
 
-    if (nextQty > availableQuantity) {
+    if (enforceStock && nextQty > availableQuantity) {
       toast.error("الكمية المطلوبة غير متوفرة في المخزون");
       return;
     }
@@ -104,7 +106,7 @@ const ProductsTable: React.FC<ProductsTableProps> = ({
   const addProduct = (product: Product) => {
     const availableQuantity = getAvailableQuantity(product);
 
-    if (availableQuantity <= 0) {
+    if (enforceStock && availableQuantity <= 0) {
       toast.error("الكمية المطلوبة غير متوفرة في المخزون");
       return;
     }
@@ -114,7 +116,7 @@ const ProductsTable: React.FC<ProductsTableProps> = ({
 
       if (exists) {
         const nextQty = exists.qty + 1;
-        if (nextQty > availableQuantity) {
+        if (enforceStock && nextQty > availableQuantity) {
           toast.error("الكمية المطلوبة غير متوفرة في المخزون");
           return current;
         }

@@ -18,18 +18,26 @@ import { useInvoiceDraftSync } from "@/hooks/useInvoiceDraftSync";
 import { useOfflineSalesSync } from "@/hooks/useOfflineSalesSync";
 import getAllCustomer from "@/services/customer";
 import { InvoicePaymentStatus } from "@/services/invoiceDraft";
+import { markQuotationConverted } from "@/services/quotations";
 import { enqueueOfflineSale } from "@/services/offlineSales";
 import getAllProducts from "@/services/products";
 import { sell, sellProducts } from "@/services/transaction";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, Wifi, WifiOff } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { toast } from "sonner";
 
 const toNumber = (value: unknown) => {
   const numberValue = Number(value);
   return Number.isFinite(numberValue) ? numberValue : 0;
 };
+
+const getAvailableQuantity = (product?: any) =>
+  Math.max(
+    toNumber(product?.quantity) - toNumber(product?.reservedQuantity),
+    0,
+  );
 
 const getRequestErrorMessage = (error: unknown) => {
   const responseData = (error as any)?.response?.data;
@@ -47,7 +55,10 @@ const getRequestErrorMessage = (error: unknown) => {
 };
 
 export default function SellProduct() {
+  const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
+  const sourceQuotationIdRef = useRef<string | null>(null);
+  const quotationAppliedRef = useRef(false);
 
   const {
     draft,
@@ -93,10 +104,52 @@ export default function SellProduct() {
     [amount, discount],
   );
 
+  useEffect(() => {
+    const quotation = (location.state as any)?.quotation;
+
+    if (!quotation || quotationAppliedRef.current) {
+      return;
+    }
+
+    quotationAppliedRef.current = true;
+    sourceQuotationIdRef.current = quotation.id || null;
+
+    patchDraft(
+      {
+        customerId: quotation.customerId || "",
+        products: Array.isArray(quotation.products)
+          ? quotation.products.map((product: any) => ({
+              ...product,
+              qty: toNumber(product.qty),
+              sellPrice: toNumber(product.sellPrice),
+            }))
+          : [],
+        discount:
+          quotation.discount === undefined || quotation.discount === null
+            ? ""
+            : String(quotation.discount),
+        currency: quotation.currency || "USD",
+        exchangeRate:
+          quotation.currency === "USD"
+            ? 1
+            : toNumber(quotation.exchangeRate) || 1,
+      },
+      { immediate: true },
+    );
+  }, [location.state, patchDraft]);
+
   const sellProductMutation = useMutation({
     mutationFn: (dataToSend: sell) => sellProducts({ newSell: dataToSend }),
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       toast.success("تم إنشاء الفاتورة بنجاح");
+      if (sourceQuotationIdRef.current) {
+        await markQuotationConverted(
+          sourceQuotationIdRef.current,
+          result?.data?.id,
+        );
+        queryClient.invalidateQueries({ queryKey: ["quotations-table"] });
+        sourceQuotationIdRef.current = null;
+      }
       await clearDraft();
       await refreshPendingSalesCount();
       queryClient.invalidateQueries({ queryKey: ["sells-table"] });
@@ -216,6 +269,39 @@ export default function SellProduct() {
       )
     ) {
       toast.error("كل الكميات وأسعار البيع يجب أن تكون أكبر من صفر");
+      return;
+    }
+
+    if (!Array.isArray(products) || products.length === 0) {
+      toast.error("تعذر التحقق من كميات المنتجات الحالية");
+      return;
+    }
+
+    const unavailableProduct = selectedProducts.find((selectedProduct) => {
+      const currentProduct = products.find(
+        (product: any) => String(product.id) === String(selectedProduct.id),
+      );
+
+      if (!currentProduct) {
+        return true;
+      }
+
+      return (
+        toNumber(selectedProduct.qty) > getAvailableQuantity(currentProduct)
+      );
+    });
+
+    if (unavailableProduct) {
+      const currentProduct = products.find(
+        (product: any) => String(product.id) === String(unavailableProduct.id),
+      );
+      const availableQuantity = currentProduct
+        ? getAvailableQuantity(currentProduct)
+        : 0;
+
+      toast.error(
+        `الكمية المطلوبة من ${unavailableProduct.name} غير متوفرة. المتاح حالياً: ${availableQuantity}`,
+      );
       return;
     }
 

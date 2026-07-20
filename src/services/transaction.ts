@@ -217,6 +217,7 @@ export async function payCustomerDebt(dataToSend: {
 
 export async function paySupplierDebt(dataToSend: {
   supplierId: string;
+  purchaseId?: string;
   amount: number;
   note: string;
   currency: string;
@@ -229,6 +230,7 @@ export async function paySupplierDebt(dataToSend: {
     const response = await apiClient.post("/api/transactions/supplierPayment", {
       paymentData: {
         supplierId: dataToSend.supplierId,
+        purchaseId: dataToSend.purchaseId,
         amount: dataToSend.amount,
         note: dataToSend.note,
         currency: dataToSend.currency,

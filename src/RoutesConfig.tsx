@@ -6,6 +6,7 @@ import type { AppPermission } from "@/config/permissions";
 const Products = React.lazy(() => import("@/pages/Products"));
 const Dashboard = React.lazy(() => import("@/pages/Dashboard"));
 const SellProduct = React.lazy(() => import("@/pages/SellProduct"));
+const Quotations = React.lazy(() => import("@/pages/Quotations"));
 const Home = React.lazy(() => import("@/pages/Home"));
 const NotFound = React.lazy(() => import("@/pages/NotFound"));
 const Login = React.lazy(() => import("@/pages/Login"));
@@ -58,6 +59,7 @@ export const routesConfig = [
   { path: "/customers", element:  protect(<Customers />, ["admin"], "customers") },
   { path: "/dashboard", element: protect(<Dashboard />, ["admin", "user"], "dashboard") },
   { path: "/sellProduct", element: protect(<SellProduct />, ["admin"], "sell-product") },
+  { path: "/quotations", element: protect(<Quotations />, ["admin"], "quotations") },
   { path: "/material-reservations", element: protect(<MaterialReservations />, ["admin"], "material-reservations") },
   { path: "/financialStatement", element: protect(<FinancialStatement />, ["admin"], "financial-statement") },
   { path: "/SupplierDetails", element: protect(<SupplierDetails />, ["admin"], "suppliers") },

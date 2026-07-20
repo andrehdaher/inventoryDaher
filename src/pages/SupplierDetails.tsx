@@ -19,14 +19,41 @@ import {
   handleSupplierReturn,
   paySupplierDebt,
 } from "@/services/transaction";
+import { parseDate } from "@/utils/parseDate";
 import CardContent from "@mui/material/CardContent";
 import CardHeader from "@mui/material/CardHeader";
 import Skeleton from "@mui/material/Skeleton";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+
+const toNumber = (value: unknown) => {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : 0;
+};
+
+const formatAmount = (value: unknown) =>
+  toNumber(value).toLocaleString("en-US", {
+    maximumFractionDigits: 2,
+  });
+
+const getPaymentStatusLabel = (status?: string) => {
+  if (status === "cash") return "نقدي";
+  if (status === "part") return "جزئي";
+  if (status === "debt") return "دين";
+  return "غير محدد";
+};
+
+const getSupplierPaymentMovementLabel = (payment: any) => {
+  if (payment?.purchaseId && payment?.type === "expense") {
+    return "تسديد فاتورة شراء";
+  }
+
+  if (toNumber(payment?.amount) < 0) return "دفع للمورد";
+  return "دفعة من المورد";
+};
 
 export default function SupplierDetails() {
   const navigate = useNavigate();
@@ -47,6 +74,14 @@ export default function SupplierDetails() {
   const [paymentAccountId, setPaymentAccountId] = useState("");
   const [payableAccountId, setPayableAccountId] = useState("");
   const [inventoryAccountId, setInventoryAccountId] = useState("");
+  const [invoicePaymentOpenId, setInvoicePaymentOpenId] = useState<
+    string | null
+  >(null);
+  const [invoicePaymentAmount, setInvoicePaymentAmount] = useState(0);
+  const [invoicePaymentNote, setInvoicePaymentNote] = useState("");
+  const [invoicePaymentCurrency, setInvoicePaymentCurrency] = useState("USD");
+  const [invoicePaymentExchangeRate, setInvoicePaymentExchangeRate] =
+    useState(1);
 
   const queryClient = useQueryClient();
   const [supplier, setSupplier] = useState<any>({});
@@ -71,6 +106,11 @@ export default function SupplierDetails() {
     setNote("");
     setCurrency("");
     setExchangeRate(1);
+    setInvoicePaymentOpenId(null);
+    setInvoicePaymentAmount(0);
+    setInvoicePaymentNote("");
+    setInvoicePaymentCurrency("USD");
+    setInvoicePaymentExchangeRate(1);
   };
 
   const validateSupplierPaymentAccounts = () => {
@@ -113,6 +153,7 @@ export default function SupplierDetails() {
       queryClient.invalidateQueries({
         queryKey: ["products-table"],
       });
+      queryClient.invalidateQueries({ queryKey: ["payments-table"] });
     },
     onError: (error) => {
       console.error(error);
@@ -139,7 +180,7 @@ export default function SupplierDetails() {
       paymentAccountId?: string;
     }) => handleSupplierReturn(dataToSend),
     onSuccess: () => {
-      toast.success("تم الارجاع بنجاح!");
+      toast.success("تم الإرجاع بنجاح!");
       setReturnAmount("");
       setReason("");
       setPartValue(0);
@@ -150,26 +191,254 @@ export default function SupplierDetails() {
     },
     onError: (error) => {
       console.error(error);
-      toast.error("حدث خطأ أثناء ارجاع المنتج");
+      toast.error("حدث خطأ أثناء إرجاع المنتج");
     },
   });
 
   const paymentsColumns = [
     { label: "المعرف", key: "id", hidden: true },
-    { label: "المبلغ", key: "amount" },
+    { label: "نوع الحركة", key: "movementLabel" },
+    { label: "الفاتورة", key: "invoiceReference" },
+    { label: "المبلغ", key: "amountDisplay" },
+    { label: "العملة", key: "currency" },
     { label: "الوصف", key: "note" },
     { label: "التاريخ", key: "date" },
   ];
 
   const purchasesColumns = [
     { label: "المعرف", key: "id", hidden: true },
-    { label: "كود المادة", key: "code" },
-    { label: "اسم المادة", key: "name" },
-    { label: "الكمية", key: "quantity" },
-    { label: "المستودع", key: "warehouse" },
-    { label: "السعر النهائي", key: "totalPrice" },
+    { label: "الكود", key: "code" },
+    { label: "طريقة الدفع", key: "status" },
+    { label: "الإجمالي", key: "totalPriceDisplay" },
+    { label: "المدفوع", key: "paidAmountDisplay" },
+    { label: "المتبقي", key: "remainingDebtDisplay" },
+    { label: "دفعات الفاتورة", key: "invoicePaymentsDisplay" },
+    { label: "العملة", key: "currency" },
+    { label: "المنتجات", key: "productsString" },
     { label: "التاريخ", key: "date" },
   ];
+
+  const supplierPurchases = useMemo(
+    () =>
+      [...(data?.data?.purchases || [])]
+        .map((purchase) => {
+          const totalPrice = toNumber(purchase.totalPrice);
+          const remainingDebt = toNumber(purchase.remainingDebt);
+          const invoicePayments = Array.isArray(purchase.invoicePayments)
+            ? purchase.invoicePayments
+            : [];
+          const paidAmount =
+            purchase.paidAmount !== undefined
+              ? toNumber(purchase.paidAmount)
+              : Math.max(totalPrice - remainingDebt, 0);
+          const invoicePaymentsDisplay = invoicePayments.length
+            ? invoicePayments
+                .map(
+                  (payment) =>
+                    `${formatAmount(Math.abs(toNumber(payment.amount)))} - ${
+                      payment.date
+                        ? new Date(payment.date).toLocaleDateString("en-GB")
+                        : ""
+                    }`,
+                )
+                .join(" | ")
+            : "-";
+          const productsString =
+            purchase.productsString ||
+            (Array.isArray(purchase.products) && purchase.products.length > 0
+              ? purchase.products
+                  .map(
+                    (product) =>
+                      `${product.name} (${toNumber(product.quantity)})`,
+                  )
+                  .join(", ")
+              : purchase.name || "-");
+
+          return {
+            ...purchase,
+            status:
+              purchase.paymentStatusLabel ||
+              getPaymentStatusLabel(purchase.paymentStatus),
+            totalPrice,
+            totalPriceDisplay: formatAmount(totalPrice),
+            paidAmount,
+            paidAmountDisplay: formatAmount(paidAmount),
+            remainingDebt,
+            remainingDebtDisplay: formatAmount(remainingDebt),
+            invoicePaymentsDisplay,
+            currency: purchase.currency || "-",
+            productsString,
+          };
+        })
+        .sort((a, b) => parseDate(b.date) - parseDate(a.date)),
+    [data],
+  );
+
+  const supplierPayments = useMemo(
+    () =>
+      [...(data?.data?.payments || [])]
+        .map((payment) => ({
+          ...payment,
+          movementLabel: getSupplierPaymentMovementLabel(payment),
+          invoiceReference: payment.purchaseId
+            ? `فاتورة ${String(payment.purchaseId).slice(0, 8)}`
+            : "-",
+          amountDisplay: formatAmount(Math.abs(toNumber(payment.amount))),
+          currency: payment.currency || "-",
+        }))
+        .sort((a, b) => parseDate(b.date) - parseDate(a.date)),
+    [data],
+  );
+
+  const purchasesSummary = useMemo(
+    () => ({
+      cash: supplierPurchases.filter(
+        (purchase) => purchase.paymentStatus === "cash",
+      ).length,
+      part: supplierPurchases.filter(
+        (purchase) => purchase.paymentStatus === "part",
+      ).length,
+      debt: supplierPurchases.filter(
+        (purchase) => purchase.paymentStatus === "debt",
+      ).length,
+      remainingDebt: supplierPurchases.reduce(
+        (sum, purchase) => sum + toNumber(purchase.remainingDebt),
+        0,
+      ),
+    }),
+    [supplierPurchases],
+  );
+
+  const getCurrentSupplierId = () =>
+    String(supplier?.id || supplierId?.id || supplierId || "");
+
+  const getPaymentAmountInBaseCurrency = (
+    rawAmount: number,
+    selectedCurrency: string,
+    selectedExchangeRate: number,
+  ) =>
+    selectedCurrency === "USD"
+      ? rawAmount
+      : Number((rawAmount / selectedExchangeRate).toFixed(3));
+
+  const submitGeneralSupplierPayment = (direction: "in" | "out") => {
+    const amountNumber = toNumber(amount);
+
+    if (!validateSupplierPaymentAccounts()) return;
+
+    if (amountNumber <= 0) {
+      toast.error("قيمة الدفعة يجب أن تكون أكبر من صفر");
+      return;
+    }
+
+    if (!currency) {
+      toast.error("الرجاء اختيار العملة");
+      return;
+    }
+
+    if (currency !== "USD" && toNumber(exchangeRate) <= 0) {
+      toast.error("الرجاء إدخال سعر صرف صحيح");
+      return;
+    }
+
+    const amountInBaseCurrency = getPaymentAmountInBaseCurrency(
+      amountNumber,
+      currency,
+      exchangeRate,
+    );
+    const sign = direction === "out" ? -1 : 1;
+
+    paySupplierDebtMutation.mutate({
+      supplierId: getCurrentSupplierId(),
+      amount: sign * amountInBaseCurrency,
+      note,
+      currency,
+      exchangeRate: currency === "USD" ? 1 : exchangeRate,
+      amount_base: sign * amountNumber,
+      paymentAccountId,
+      payableAccountId,
+    });
+  };
+
+  const openInvoicePayment = (purchase: any) => {
+    const nextCurrency = purchase.currency || "USD";
+    const nextExchangeRate =
+      nextCurrency === "USD" ? 1 : toNumber(purchase.exchangeRate) || 1;
+    const remainingDebt = toNumber(purchase.remainingDebt);
+
+    setInvoicePaymentOpenId(purchase.id);
+    setInvoicePaymentAmount(
+      nextCurrency === "USD"
+        ? remainingDebt
+        : Number((remainingDebt * nextExchangeRate).toFixed(3)),
+    );
+    setInvoicePaymentNote(
+      `تسديد فاتورة شراء ${String(purchase.code || purchase.id).slice(0, 12)}`,
+    );
+    setInvoicePaymentCurrency(nextCurrency);
+    setInvoicePaymentExchangeRate(nextExchangeRate);
+    setPaymentAccountId(supplier.defaultPaymentAccountId || paymentAccountId);
+    setPayableAccountId(supplier.defaultPayableAccountId || payableAccountId);
+  };
+
+  const submitInvoicePayment = (purchase: any) => {
+    const remainingDebt = toNumber(purchase.remainingDebt);
+    const amountInBaseCurrency = getPaymentAmountInBaseCurrency(
+      invoicePaymentAmount,
+      invoicePaymentCurrency,
+      invoicePaymentExchangeRate,
+    );
+
+    if (remainingDebt <= 0) {
+      toast.error("هذه الفاتورة مسددة بالكامل");
+      return;
+    }
+
+    if (amountInBaseCurrency <= 0 || amountInBaseCurrency > remainingDebt) {
+      toast.error("قيمة الدفعة يجب أن تكون أكبر من صفر ولا تتجاوز المتبقي");
+      return;
+    }
+
+    if (!paymentAccountId || !payableAccountId) {
+      toast.error("الرجاء اختيار حساب الدفع وحساب الموردين");
+      return;
+    }
+
+    if (
+      invoicePaymentCurrency !== "USD" &&
+      invoicePaymentExchangeRate <= 0
+    ) {
+      toast.error("الرجاء إدخال سعر صرف صحيح");
+      return;
+    }
+
+    paySupplierDebtMutation.mutate({
+      supplierId: getCurrentSupplierId(),
+      purchaseId: purchase.id,
+      amount: -amountInBaseCurrency,
+      note:
+        invoicePaymentNote ||
+        `تسديد فاتورة شراء ${String(purchase.code || purchase.id).slice(
+          0,
+          12,
+        )}`,
+      currency: invoicePaymentCurrency,
+      exchangeRate: invoicePaymentCurrency === "USD" ? 1 : invoicePaymentExchangeRate,
+      amount_base: -invoicePaymentAmount,
+      paymentAccountId,
+      payableAccountId,
+    });
+  };
+
+  const getInvoicePaymentMaxAmount = (purchase: any) =>
+    invoicePaymentCurrency === "USD"
+      ? toNumber(purchase.remainingDebt)
+      : Number(
+          (
+            toNumber(purchase.remainingDebt) *
+            toNumber(invoicePaymentExchangeRate)
+          ).toFixed(3),
+        );
 
   const handleReturn = async (e: React.FormEvent, row: any) => {
     e.preventDefault();
@@ -180,6 +449,7 @@ export default function SupplierDetails() {
 
     try {
       const returnQty = Number(returnAmount);
+      const rowPayPrice = toNumber(row.payPrice);
 
       if (!returnQty || returnQty <= 0) {
         toast.error("الرجاء إدخال كمية إرجاع صحيحة");
@@ -195,11 +465,11 @@ export default function SupplierDetails() {
         productCode: row.code,
         productName: row.name,
         supplierName: supplier.name,
-        supplierId: supplierId.id,
+        supplierId: getCurrentSupplierId(),
         warehouse: row.warehouse,
         qty: returnQty,
         returnType: isDebt,
-        returnValue: returnQty * row.payPrice,
+        returnValue: returnQty * rowPayPrice,
         referenceId: row.id,
         productId: row.id,
         partValue,
@@ -211,7 +481,10 @@ export default function SupplierDetails() {
 
       returnMutation.mutate(payload);
     } catch (error: any) {
-      console.error("خطأ أثناء الإرجاع:", error.response?.data || error.message);
+      console.error(
+        "خطأ أثناء الإرجاع:",
+        error.response?.data || error.message,
+      );
     }
   };
 
@@ -236,7 +509,7 @@ export default function SupplierDetails() {
               isSupplier={true}
             />
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <PopupForm
                 title="دفعة من المورد"
                 trigger={
@@ -259,27 +532,13 @@ export default function SupplierDetails() {
                   className="space-y-4 mt-4"
                   onSubmit={(e) => {
                     e.preventDefault();
-                    if (!validateSupplierPaymentAccounts()) return;
-
-                    paySupplierDebtMutation.mutate({
-                      supplierId: supplierId.id,
-                      amount:
-                        currency === "USD"
-                          ? amount
-                          : Number((Number(amount) / exchangeRate).toFixed(1)),
-                      note,
-                      currency,
-                      exchangeRate,
-                      amount_base: amount,
-                      paymentAccountId,
-                      payableAccountId,
-                    });
+                    submitGeneralSupplierPayment("in");
                   }}
                 >
                   <FormInput
                     label="قيمة الدفعة"
                     id="payment-amount-in"
-                    type="text"
+                    type="number"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                   />
@@ -295,9 +554,9 @@ export default function SupplierDetails() {
                       <SelectValue placeholder="العملة المدفوع بها" />
                     </SelectTrigger>
                     <SelectContent>
-                      {["SYP", "USD"].map((c) => (
-                        <SelectItem key={c} value={c}>
-                          {c}
+                      {["SYP", "USD"].map((currencyOption) => (
+                        <SelectItem key={currencyOption} value={currencyOption}>
+                          {currencyOption}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -346,27 +605,13 @@ export default function SupplierDetails() {
                   className="space-y-4 mt-4"
                   onSubmit={(e) => {
                     e.preventDefault();
-                    if (!validateSupplierPaymentAccounts()) return;
-
-                    paySupplierDebtMutation.mutate({
-                      supplierId: supplierId.id,
-                      amount:
-                        currency === "USD"
-                          ? -Number(amount)
-                          : -Number((Number(amount) / exchangeRate).toFixed(1)),
-                      note,
-                      currency,
-                      exchangeRate,
-                      amount_base: -Number(amount),
-                      paymentAccountId,
-                      payableAccountId,
-                    });
+                    submitGeneralSupplierPayment("out");
                   }}
                 >
                   <FormInput
                     label="قيمة الدفعة"
                     id="payment-amount-out"
-                    type="text"
+                    type="number"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                   />
@@ -382,9 +627,9 @@ export default function SupplierDetails() {
                       <SelectValue placeholder="العملة المدفوع بها" />
                     </SelectTrigger>
                     <SelectContent>
-                      {["SYP", "USD"].map((c) => (
-                        <SelectItem key={c} value={c}>
-                          {c}
+                      {["SYP", "USD"].map((currencyOption) => (
+                        <SelectItem key={currencyOption} value={currencyOption}>
+                          {currencyOption}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -425,114 +670,275 @@ export default function SupplierDetails() {
         <Card className="overflow-x-auto">
           {isLoading ? (
             <Skeleton className="h-48 w-full" />
-          ) : !data?.data?.payments?.length && !data?.data?.purchases?.length ? (
+          ) : !data?.data ? (
             <p className="text-muted-foreground text-center">
-              لا توجد معاملات حاليا.
+              لا توجد معاملات حالياً.
             </p>
           ) : (
-            <CardContent className="space-y-4 md:space-y-0 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <CardContent className="grid grid-cols-1 gap-4">
               <DataTable
                 title="الدفعات"
                 columns={paymentsColumns}
-                data={[...(data?.data?.payments || [])].sort(
-                  (a, b) =>
-                    new Date(b.date).getTime() - new Date(a.date).getTime(),
-                )}
+                data={supplierPayments}
               />
+
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <div className="rounded-md border p-3">
+                  <p className="text-sm text-muted-foreground">فواتير نقدية</p>
+                  <p className="text-xl font-bold">{purchasesSummary.cash}</p>
+                </div>
+                <div className="rounded-md border p-3">
+                  <p className="text-sm text-muted-foreground">فواتير جزئية</p>
+                  <p className="text-xl font-bold">{purchasesSummary.part}</p>
+                </div>
+                <div className="rounded-md border p-3">
+                  <p className="text-sm text-muted-foreground">فواتير دين</p>
+                  <p className="text-xl font-bold">{purchasesSummary.debt}</p>
+                </div>
+                <div className="rounded-md border p-3">
+                  <p className="text-sm text-muted-foreground">
+                    إجمالي المتبقي
+                  </p>
+                  <p className="text-xl font-bold text-destructive">
+                    {formatAmount(purchasesSummary.remainingDebt)}
+                  </p>
+                </div>
+              </div>
+
               <DataTable
-                title="عمليات الشراء"
+                title="فواتير الشراء"
+                description="يمكن معرفة المدفوع والمتبقي ودفعات كل فاتورة بشكل منفصل."
                 columns={purchasesColumns}
-                data={data.data.purchases}
+                data={supplierPurchases}
                 renderRowActions={(row) => (
-                  <PopupForm
-                    title={`إرجاع منتج: ${row.code} - ${row.name || ""}`}
-                    isOpen={openRowId === row.id.toString()}
-                    setIsOpen={() => setOpenRowId(null)}
-                    trigger={
-                      <Button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setOpenRowId(row.id.toString());
+                  <div className="flex gap-2">
+                    <PopupForm
+                      title="تسديد فاتورة شراء"
+                      isOpen={invoicePaymentOpenId === row.id}
+                      setIsOpen={(value) => {
+                        if (!value) {
+                          setInvoicePaymentOpenId(null);
+                          return;
+                        }
+
+                        openInvoicePayment(row);
+                      }}
+                      trigger={
+                        <Button
+                          type="button"
+                          variant="accent"
+                          disabled={toNumber(row.remainingDebt) <= 0}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openInvoicePayment(row);
+                          }}
+                        >
+                          تسديد
+                        </Button>
+                      }
+                    >
+                      <form
+                        className="space-y-4"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          submitInvoicePayment(row);
                         }}
                       >
-                        إرجاع
-                      </Button>
-                    }
-                  >
-                    <form
-                      onSubmit={(e) => handleReturn(e, row)}
-                      className="space-y-4"
-                    >
-                      <div>
+                        <div className="rounded-md border p-3 text-sm">
+                          <div className="flex justify-between">
+                            <span>إجمالي الفاتورة</span>
+                            <span>{formatAmount(row.totalPrice)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>المدفوع</span>
+                            <span>{formatAmount(row.paidAmount)}</span>
+                          </div>
+                          <div className="flex justify-between font-bold text-destructive">
+                            <span>المتبقي</span>
+                            <span>{formatAmount(row.remainingDebt)}</span>
+                          </div>
+                        </div>
+
                         <FormInput
-                          label="الكمية"
-                          id="return-quantity"
+                          label="قيمة الدفعة"
+                          id={`supplier-invoice-payment-${row.id}`}
                           type="number"
-                          value={returnAmount}
-                          onChange={(e) => setReturnAmount(e.target.value)}
+                          min={0}
+                          max={getInvoicePaymentMaxAmount(row)}
+                          value={invoicePaymentAmount}
+                          onChange={(event) =>
+                            setInvoicePaymentAmount(Number(event.target.value))
+                          }
                         />
-                        <p className="text-sm text-gray-500">
-                          الكمية الأصلية: {row.quantity}
-                          <br />
-                          سعر الواحدة: {row.payPrice}
-                        </p>
-                      </div>
 
-                      <p className="font-semibold">
-                        المبلغ الإجمالي: {row.payPrice * Number(returnAmount)}
-                      </p>
-
-                      <PaymentTypeSelector
-                        value={isDebt}
-                        onChange={setIsDebt}
-                        partValue={partValue}
-                        onPartValueChange={(v) => setPartValue(v)}
-                      />
-
-                      <FormInput
-                        id="return-reason"
-                        label="ملاحظات"
-                        type="text"
-                        value={reason}
-                        onChange={(e) => setReason(e.target.value)}
-                      />
-
-                      <AccountSelect
-                        label="حساب المخزون"
-                        value={inventoryAccountId}
-                        onChange={setInventoryAccountId}
-                        filterType="inventory"
-                      />
-                      {(isDebt === "debt" || isDebt === "part") && (
-                        <AccountSelect
-                          label="حساب الموردين"
-                          value={payableAccountId}
-                          onChange={setPayableAccountId}
-                          filterType="payable"
+                        <FormInput
+                          label="ملاحظات"
+                          id={`supplier-invoice-payment-note-${row.id}`}
+                          value={invoicePaymentNote}
+                          onChange={(event) =>
+                            setInvoicePaymentNote(event.target.value)
+                          }
                         />
-                      )}
-                      {(isDebt === "cash" || isDebt === "part") && (
+
+                        <Select
+                          value={invoicePaymentCurrency}
+                          onValueChange={(nextCurrency) => {
+                            setInvoicePaymentCurrency(nextCurrency);
+                            setInvoicePaymentExchangeRate(
+                              nextCurrency === "USD"
+                                ? 1
+                                : invoicePaymentExchangeRate || 1,
+                            );
+                          }}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="العملة المدفوع بها" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {["SYP", "USD"].map((currencyOption) => (
+                              <SelectItem
+                                key={currencyOption}
+                                value={currencyOption}
+                              >
+                                {currencyOption}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+
+                        <FormInput
+                          id={`supplier-invoice-payment-exchange-${row.id}`}
+                          label="سعر الصرف"
+                          type="number"
+                          value={
+                            invoicePaymentCurrency === "USD"
+                              ? 1
+                              : invoicePaymentExchangeRate
+                          }
+                          disabled={invoicePaymentCurrency === "USD"}
+                          onChange={(event) =>
+                            setInvoicePaymentExchangeRate(
+                              Number(event.target.value),
+                            )
+                          }
+                        />
+
                         <AccountSelect
                           label="حساب الدفع"
                           value={paymentAccountId}
                           onChange={setPaymentAccountId}
                           filterType="payment"
                         />
-                      )}
 
-                      <div className="flex justify-end mt-2">
+                        <AccountSelect
+                          label="حساب الموردين"
+                          value={payableAccountId}
+                          onChange={setPayableAccountId}
+                          filterType="payable"
+                        />
+
                         <Button
                           type="submit"
                           className="w-full"
-                          disabled={returnMutation.isPending}
-                          loading={returnMutation.isPending}
+                          disabled={paySupplierDebtMutation.isPending}
+                          loading={paySupplierDebtMutation.isPending}
                         >
-                          تأكيد الإرجاع
+                          تأكيد التسديد
                         </Button>
-                      </div>
-                    </form>
-                  </PopupForm>
+                      </form>
+                    </PopupForm>
+
+                    <PopupForm
+                      title={`إرجاع منتج: ${row.code} - ${row.name || ""}`}
+                      isOpen={openRowId === row.id.toString()}
+                      setIsOpen={() => setOpenRowId(null)}
+                      trigger={
+                        <Button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setOpenRowId(row.id.toString());
+                          }}
+                        >
+                          إرجاع
+                        </Button>
+                      }
+                    >
+                      <form
+                        onSubmit={(e) => handleReturn(e, row)}
+                        className="space-y-4"
+                      >
+                        <div>
+                          <FormInput
+                            label="الكمية"
+                            id="return-quantity"
+                            type="number"
+                            value={returnAmount}
+                            onChange={(e) => setReturnAmount(e.target.value)}
+                          />
+                          <p className="text-sm text-gray-500">
+                            الكمية الأصلية: {row.quantity}
+                            <br />
+                            سعر الواحدة: {row.payPrice}
+                          </p>
+                        </div>
+
+                        <p className="font-semibold">
+                          المبلغ الإجمالي:{" "}
+                          {toNumber(row.payPrice) * Number(returnAmount)}
+                        </p>
+
+                        <PaymentTypeSelector
+                          value={isDebt}
+                          onChange={setIsDebt}
+                          partValue={partValue}
+                          onPartValueChange={(v) => setPartValue(v)}
+                        />
+
+                        <FormInput
+                          id="return-reason"
+                          label="ملاحظات"
+                          type="text"
+                          value={reason}
+                          onChange={(e) => setReason(e.target.value)}
+                        />
+
+                        <AccountSelect
+                          label="حساب المخزون"
+                          value={inventoryAccountId}
+                          onChange={setInventoryAccountId}
+                          filterType="inventory"
+                        />
+                        {(isDebt === "debt" || isDebt === "part") && (
+                          <AccountSelect
+                            label="حساب الموردين"
+                            value={payableAccountId}
+                            onChange={setPayableAccountId}
+                            filterType="payable"
+                          />
+                        )}
+                        {(isDebt === "cash" || isDebt === "part") && (
+                          <AccountSelect
+                            label="حساب الدفع"
+                            value={paymentAccountId}
+                            onChange={setPaymentAccountId}
+                            filterType="payment"
+                          />
+                        )}
+
+                        <div className="flex justify-end mt-2">
+                          <Button
+                            type="submit"
+                            className="w-full"
+                            disabled={returnMutation.isPending}
+                            loading={returnMutation.isPending}
+                          >
+                            تأكيد الإرجاع
+                          </Button>
+                        </div>
+                      </form>
+                    </PopupForm>
+                  </div>
                 )}
               />
             </CardContent>
